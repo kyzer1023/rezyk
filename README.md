@@ -49,6 +49,16 @@ Current codebase status:
 
 This README reflects the project requirements and target architecture so implementation can be tracked against judging criteria.
 
+## Documentation
+
+- Docs index: [`docs/README.md`](docs/README.md)
+- Product docs:
+  - [`docs/product/User-Case-Stories.md`](docs/product/User-Case-Stories.md)
+  - [`docs/product/Navigation-Workflow-Pages.md`](docs/product/Navigation-Workflow-Pages.md)
+- Planning docs:
+  - [`docs/planning/Brainstorm.md`](docs/planning/Brainstorm.md)
+  - [`docs/planning/TechStack-and-WorkSplit.md`](docs/planning/TechStack-and-WorkSplit.md)
+
 ## Tech Stack
 
 - Language: TypeScript
