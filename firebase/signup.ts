@@ -9,6 +9,9 @@ export const googleSignIn = async () => {
     provider.addScope(
       "https://www.googleapis.com/auth/classroom.student-submissions.students.readonly",
     );
+    provider.addScope(
+      "https://www.googleapis.com/auth/classroom.courses.readonly",
+    );
 
     const result = await signInWithPopup(auth, provider);
 
