@@ -13,14 +13,11 @@ export const googleSignIn = async () => {
     const result = await signInWithPopup(auth, provider);
 
     const credential = GoogleAuthProvider.credentialFromResult(result);
-    const accessToken = credential?.accessToken;
-    const firebaseIdToken = await result.user.getIdToken();
+    const token = credential?.accessToken;
+    const user = result.user;
+    console.log({ user, token });
 
-    if (!accessToken) {
-      throw new Error("Failed to obtain access token from Google.");
-    }
-
-    return { firebaseIdToken, accessToken };
+    return { user, token };
   } catch (error) {
     console.error("Error during Google sign-in:", error);
     throw error;
