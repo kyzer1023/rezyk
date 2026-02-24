@@ -2,8 +2,22 @@
 
 import Link from "next/link";
 import { routes } from "@/lib/routes";
+import { googleSignIn } from "@/firebase/signup";
 
 export default function LandingPage() {
+  async function signIn() {
+    const { user, token } = await googleSignIn();
+    const res = await fetch("/api/auth/google/exchange", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${await user.getIdToken()}`,
+      },
+      body: JSON.stringify({ googleAccessToken: token }),
+    });
+    const { success } = await res.json();
+    if (success) window.location.href = routes.authCallback();
+  }
   return (
     <div
       style={{
@@ -23,7 +37,8 @@ export default function LandingPage() {
           left: 0,
           right: 0,
           height: "50vh",
-          background: "linear-gradient(180deg, #C17A56 0%, #D4956E 60%, #FAF6F0 100%)",
+          background:
+            "linear-gradient(180deg, #C17A56 0%, #D4956E 60%, #FAF6F0 100%)",
           opacity: 0.12,
           pointerEvents: "none",
         }}
@@ -51,7 +66,16 @@ export default function LandingPage() {
             margin: "0 auto 24px",
           }}
         >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#FFFFFF"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
             <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
           </svg>
@@ -59,23 +83,52 @@ export default function LandingPage() {
 
         <h1
           className="edu-heading edu-fade-in"
-          style={{ fontSize: 36, marginBottom: 10, fontWeight: 600, letterSpacing: -0.5 }}
+          style={{
+            fontSize: 36,
+            marginBottom: 10,
+            fontWeight: 600,
+            letterSpacing: -0.5,
+          }}
         >
           EduInsight AI
         </h1>
         <p
           className="edu-fade-in edu-fd1"
-          style={{ fontSize: 16, lineHeight: 1.7, color: "#8A7D6F", marginBottom: 36 }}
+          style={{
+            fontSize: 16,
+            lineHeight: 1.7,
+            color: "#8A7D6F",
+            marginBottom: 36,
+          }}
         >
-          Understand your classroom, one quiz at a time.
-          Data-driven insights for thoughtful teaching.
+          Understand your classroom, one quiz at a time. Data-driven insights
+          for thoughtful teaching.
         </p>
 
-        <div className="edu-card edu-fade-in edu-fd2" style={{ padding: "36px 32px" }}>
-          <Link href={routes.authCallback()}>
-            <button className="edu-btn" style={{ fontSize: 16, padding: "14px 32px", width: "100%" }}>
-              <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+        <div
+          className="edu-card edu-fade-in edu-fd2"
+          style={{ padding: "36px 32px" }}
+        >
+          <Link href={""}>
+            <button
+              className="edu-btn"
+              style={{ fontSize: 16, padding: "14px 32px", width: "100%" }}
+              onClick={signIn}
+            >
+              <span
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 10,
+                }}
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
                   <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                   <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
@@ -87,7 +140,10 @@ export default function LandingPage() {
           </Link>
         </div>
 
-        <p className="edu-fade-in edu-fd3" style={{ fontSize: 12, color: "#B5AA9C", marginTop: 28 }}>
+        <p
+          className="edu-fade-in edu-fd3"
+          style={{ fontSize: 12, color: "#B5AA9C", marginTop: 28 }}
+        >
           SDG 4 &middot; Quality Education &middot; KitaHack 2026
         </p>
       </div>
