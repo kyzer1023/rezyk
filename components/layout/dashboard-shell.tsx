@@ -2,10 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { mockUser } from "@/lib/mock-data";
+import { useEffect, useState } from "react";
 import { routes } from "@/lib/routes";
 
 type Breadcrumb = { label: string; href: string };
+
+interface UserInfo {
+  name: string;
+  email: string;
+}
 
 const navItems = [
   {
@@ -73,6 +78,27 @@ export default function DashboardShell({
 }) {
   const pathname = usePathname();
   const breadcrumbs = buildBreadcrumbs(pathname);
+  const [user, setUser] = useState<UserInfo | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/status")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.authenticated && data.user) {
+          setUser({ name: data.user.name, email: data.user.email });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const initials = user?.name
+    ? user.name
+        .split(" ")
+        .map((w) => w[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
+    : "?";
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -179,11 +205,11 @@ export default function DashboardShell({
                 fontWeight: 700,
               }}
             >
-              {mockUser.avatar}
+              {initials}
             </div>
             <div>
-              <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>{mockUser.name}</p>
-              <p style={{ fontSize: 10, color: "#B5AA9C", margin: 0 }}>{mockUser.email}</p>
+              <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>{user?.name ?? "…"}</p>
+              <p style={{ fontSize: 10, color: "#B5AA9C", margin: 0 }}>{user?.email ?? ""}</p>
             </div>
           </div>
         </div>

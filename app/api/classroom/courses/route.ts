@@ -1,10 +1,11 @@
 import { getGoogleAccessTokenFromRequest } from "@/lib/googleAccessToken";
 import { NextResponse } from "next/server";
 
-export async function GET(request: Request) {
+export const runtime = "nodejs";
+
+export async function GET() {
   try {
-    const { googleAccessToken } =
-      await getGoogleAccessTokenFromRequest(request);
+    const { googleAccessToken } = await getGoogleAccessTokenFromRequest();
     const resCourse = await fetch(
       "https://classroom.googleapis.com/v1/courses",
       {
@@ -15,14 +16,13 @@ export async function GET(request: Request) {
       },
     );
     const data = await resCourse.json();
-    console.log("Courses response:", data);
     return NextResponse.json(data, { status: resCourse.status });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     const status =
       msg === "USER_NOT_FOUND"
         ? 404
-        : msg === "MISSING_AUTH" || msg === "MISSING_GOOGLE_TOKEN"
+        : msg === "MISSING_AUTH" || msg === "RECONNECT_REQUIRED"
           ? 401
           : 500;
     return NextResponse.json({ error: msg }, { status });

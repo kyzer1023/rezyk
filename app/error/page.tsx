@@ -1,9 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { routes } from "@/lib/routes";
 
-export default function ErrorPage() {
+function ErrorContent() {
+  const params = useSearchParams();
+  const message = params.get("message");
+
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#FAF6F0", padding: 20 }}>
       <div className="edu-fade-in" style={{ textAlign: "center", maxWidth: 400 }}>
@@ -16,17 +21,25 @@ export default function ErrorPage() {
           Something went wrong
         </h1>
         <p className="edu-muted" style={{ fontSize: 15, lineHeight: 1.6, marginBottom: 28 }}>
-          An error occurred. Please retry or return to the dashboard.
+          {message || "An error occurred. Please retry or return to the dashboard."}
         </p>
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-          <button className="edu-btn" onClick={() => window.location.reload()}>
-            Retry
-          </button>
+          <a href="/api/auth/login">
+            <button className="edu-btn">Retry Sign-in</button>
+          </a>
           <Link href={routes.dashboard()}>
             <button className="edu-btn-outline">Back to Dashboard</button>
           </Link>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ErrorPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#FAF6F0" }} />}>
+      <ErrorContent />
+    </Suspense>
   );
 }

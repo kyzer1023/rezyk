@@ -1,23 +1,41 @@
 "use client";
 
-import Link from "next/link";
-import { routes } from "@/lib/routes";
-import { googleSignIn } from "@/firebase/signup";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function LandingPage() {
-  async function signIn() {
-    const { user, token } = await googleSignIn();
-    const res = await fetch("/api/auth/google/exchange", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${await user.getIdToken()}`,
-      },
-      body: JSON.stringify({ googleAccessToken: token }),
-    });
-    const { success } = await res.json();
-    if (success) window.location.href = routes.authCallback();
+  const router = useRouter();
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/auth/status")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.authenticated) {
+          router.replace("/dashboard");
+        } else {
+          setChecking(false);
+        }
+      })
+      .catch(() => setChecking(false));
+  }, [router]);
+
+  if (checking) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#FAF6F0",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <p style={{ color: "#8A7D6F", fontSize: 14 }}>Checking session…</p>
+      </div>
+    );
   }
+
   return (
     <div
       style={{
@@ -109,11 +127,10 @@ export default function LandingPage() {
           className="edu-card edu-fade-in edu-fd2"
           style={{ padding: "36px 32px" }}
         >
-          <Link href={""}>
+          <a href="/api/auth/login" style={{ textDecoration: "none" }}>
             <button
               className="edu-btn"
               style={{ fontSize: 16, padding: "14px 32px", width: "100%" }}
-              onClick={signIn}
             >
               <span
                 style={{
@@ -137,7 +154,19 @@ export default function LandingPage() {
                 Sign in with Google
               </span>
             </button>
-          </Link>
+          </a>
+
+          <p
+            style={{
+              fontSize: 12,
+              color: "#B5AA9C",
+              marginTop: 16,
+              lineHeight: 1.6,
+            }}
+          >
+            Grants read access to your Google Classroom courses and Forms
+            responses. Your data stays private.
+          </p>
         </div>
 
         <p
