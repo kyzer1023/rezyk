@@ -83,3 +83,22 @@
 - Gemini structured output requests can fail with `INVALID_ARGUMENT` when response schemas are too complex/deep; use flatter API-facing schemas and enforce strict validation locally.
 - Gemini free-tier request limits are model-specific; harness model override is useful for validation when a pinned model quota is exhausted.
 - Gemma models are available via API in this workspace, but strict JSON mode may be unavailable on some Gemma IDs; keep schema-locked app-layer inference on Gemini Flash-family models.
+
+## Cursor Cloud specific instructions
+
+### Services
+
+| Service | Command | Notes |
+|---|---|---|
+| Dev server | `bun run dev` | Next.js on port 3000. All dashboard pages render with mock data without credentials. |
+| Lint | `bun run lint` | ESLint 9 with `eslint-config-next` (core-web-vitals + typescript). |
+| Build | `bun run build` | `next build` using Turbopack. Completes in ~10s. |
+| Quiz harness | `bun run analysis:quiz-harness` | Requires `GEMINI_API_KEY` env var. |
+| Structured smoke | `bun run analysis:structured-smoke` | Requires `GEMINI_API_KEY` env var. |
+
+### Caveats
+
+- **No `.env.local` needed for frontend-only dev.** The dashboard, courses, quizzes, insights, students, and settings pages all use mock data from `lib/mock-data.ts` and work without Firebase or Google credentials. Auth (landing page sign-in) and API routes require credentials.
+- **Bun is installed to `~/.bun/bin/bun`.** The update script ensures it's on `$PATH`. Both `bun.lock` and `package-lock.json` exist; prefer `bun install`.
+- **No automated test suite exists.** The project has no unit/integration tests; validation is manual.
+- **No Docker, no git hooks, no CI configuration.**
