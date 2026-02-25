@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Cursor
 .cursor
+
+# quiz analysis script artifacts
+tools/quiz-analysis/outputs/*.json

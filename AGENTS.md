@@ -63,6 +63,10 @@
 - Focus on mock static UI flow before backend integration; no tests for now.
 - Each UI rendition must differ in layout and composition, not just color palette swaps.
 - Use one shared mock dataset across all renditions; each renders the same data differently.
+- Before implementing external API integrations, review official docs first and document key findings in a new markdown file.
+- Clearly separate fixture validation outcomes from online reliability outcomes in harness/test summaries.
+- When Gemini free-tier quotas block a pinned model, probe alternative Gemini models and report account-specific availability before proposing fallback execution.
+- For pooled Gemini keys, rotate keys on the preferred model first and only move to fallback models after preferred-model key pool exhaustion.
 
 ## Learned Workspace Facts
 
@@ -76,3 +80,6 @@
 - Planning docs: `README.md`, `Brainstorm.md`, `TechStack-and-WorkSplit.md`, `Navigation-Workflow-Pages.md`.
 - Backend integration is another team member's workload; frontend is mock-only for now.
 - Next.js 16 requires `await params` (params is a Promise in dynamic routes).
+- Gemini structured output requests can fail with `INVALID_ARGUMENT` when response schemas are too complex/deep; use flatter API-facing schemas and enforce strict validation locally.
+- Gemini free-tier request limits are model-specific; harness model override is useful for validation when a pinned model quota is exhausted.
+- Gemma models are available via API in this workspace, but strict JSON mode may be unavailable on some Gemma IDs; keep schema-locked app-layer inference on Gemini Flash-family models.
