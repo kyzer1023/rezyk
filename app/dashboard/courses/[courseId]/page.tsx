@@ -29,8 +29,37 @@ export default function CourseDetailPage({ params }: { params: Promise<{ courseI
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [syncing, setSyncing] = useState(false);
 
-  async function loadData() {
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const [cRes, qRes] = await Promise.all([
+          fetch("/api/dashboard/courses"),
+          fetch(`/api/dashboard/quizzes?courseId=${courseId}`),
+        ]);
+        const cData = await cRes.json();
+        const qData = await qRes.json();
+        if (!cancelled) {
+          const found = (cData.courses ?? []).find((c: Course) => c.id === courseId);
+          setCourse(found ?? null);
+          setQuizzes(qData.quizzes ?? []);
+        }
+      } catch {
+        // silent
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [courseId]);
+
+  async function syncQuizzes() {
+    setSyncing(true);
     try {
+      await fetch("/api/sync/quiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId }),
+      });
       const [cRes, qRes] = await Promise.all([
         fetch("/api/dashboard/courses"),
         fetch(`/api/dashboard/quizzes?courseId=${courseId}`),
@@ -43,26 +72,8 @@ export default function CourseDetailPage({ params }: { params: Promise<{ courseI
     } catch {
       // silent
     }
-  }
-
-  async function syncQuizzes() {
-    setSyncing(true);
-    try {
-      await fetch("/api/sync/quiz", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ courseId }),
-      });
-      await loadData();
-    } catch {
-      // silent
-    }
     setSyncing(false);
   }
-
-  useEffect(() => {
-    loadData();
-  }, [courseId]);
 
   return (
     <div>

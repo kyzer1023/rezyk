@@ -27,8 +27,42 @@ export default function DashboardPage() {
   const [syncing, setSyncing] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
-  async function loadData() {
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const [cRes, qRes] = await Promise.all([
+          fetch("/api/dashboard/courses"),
+          fetch("/api/dashboard/quizzes"),
+        ]);
+        const cData = await cRes.json();
+        const qData = await qRes.json();
+        if (!cancelled) {
+          setCourses(cData.courses ?? []);
+          setQuizzes(qData.quizzes ?? []);
+        }
+      } catch {
+        // silent
+      }
+      if (!cancelled) setLoaded(true);
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function syncCourses() {
+    setSyncing(true);
     try {
+      const syncRes = await fetch("/api/sync/courses", { method: "POST" });
+      const syncData = await syncRes.json();
+      const syncedCourses = syncData.courses ?? [];
+      for (const c of syncedCourses) {
+        await fetch("/api/sync/quiz", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ courseId: c.courseId }),
+        });
+      }
       const [cRes, qRes] = await Promise.all([
         fetch("/api/dashboard/courses"),
         fetch("/api/dashboard/quizzes"),
@@ -40,30 +74,8 @@ export default function DashboardPage() {
     } catch {
       // silent
     }
-    setLoaded(true);
-  }
-
-  async function syncCourses() {
-    setSyncing(true);
-    try {
-      await fetch("/api/sync/courses", { method: "POST" });
-      for (const course of courses) {
-        await fetch("/api/sync/quiz", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ courseId: course.id }),
-        });
-      }
-      await loadData();
-    } catch {
-      // silent
-    }
     setSyncing(false);
   }
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   const analyzedCount = quizzes.filter((q) => q.analysisStatus === "completed").length;
   const totalStudents = courses.reduce((sum, c) => sum + c.studentCount, 0);

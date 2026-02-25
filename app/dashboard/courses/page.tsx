@@ -17,31 +17,34 @@ export default function CoursesPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
-  async function loadCourses() {
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const res = await fetch("/api/dashboard/courses");
+        const data = await res.json();
+        if (!cancelled) setCourses(data.courses ?? []);
+      } catch {
+        // silent
+      }
+      if (!cancelled) setLoading(false);
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function syncCourses() {
+    setSyncing(true);
     try {
+      await fetch("/api/sync/courses", { method: "POST" });
       const res = await fetch("/api/dashboard/courses");
       const data = await res.json();
       setCourses(data.courses ?? []);
     } catch {
       // silent
     }
-    setLoading(false);
-  }
-
-  async function syncCourses() {
-    setSyncing(true);
-    try {
-      await fetch("/api/sync/courses", { method: "POST" });
-      await loadCourses();
-    } catch {
-      // silent
-    }
     setSyncing(false);
   }
-
-  useEffect(() => {
-    loadCourses();
-  }, []);
 
   return (
     <div>
