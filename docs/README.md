@@ -9,3 +9,7 @@ This folder contains project documentation grouped by purpose.
 ## Planning
 - [Brainstorm](./planning/Brainstorm.md)
 - [Tech Stack and Work Split](./planning/TechStack-and-WorkSplit.md)
+
+## Resources
+- [Quiz Analysis Spec](./resources/Spec.md)
+- [Quiz Analysis Research](./resources/Research.md)
