@@ -33,7 +33,7 @@ export const MODEL_ARRAY_LIMITS = {
   students: { min: 1, max: 60 },
   misconceptionsPerStudent: { min: 1, max: 6 },
   affectedQuestionsPerMisconception: { min: 1, max: 10 },
-  interventionsPerStudent: { min: 1, max: 3 },
+  interventionsPerStudent: { min: 1, max: 4 },
 } as const;
 
 export interface QuizQuestionInput {
