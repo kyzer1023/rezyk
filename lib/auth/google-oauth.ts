@@ -113,15 +113,35 @@ export async function fetchUserInfo(accessToken: string): Promise<GoogleUserInfo
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
-  if (!res.ok) {
-    throw new Error(`Failed to fetch user info: ${res.status}`);
+  if (res.ok) {
+    const data = await res.json();
+    if (data.id) {
+      return {
+        id: data.id,
+        email: data.email ?? "",
+        name: data.name ?? "Teacher",
+        picture: data.picture ?? "",
+      };
+    }
   }
 
-  const data = await res.json();
-  return {
-    id: data.id,
-    email: data.email,
-    name: data.name,
-    picture: data.picture ?? "",
-  };
+  // Fallback: derive identity from Classroom API when openid scopes are missing
+  const coursesRes = await fetch(
+    "https://classroom.googleapis.com/v1/courses?pageSize=1",
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  if (coursesRes.ok) {
+    const data = await coursesRes.json();
+    const course = (data.courses ?? [])[0] as { ownerId?: string; name?: string } | undefined;
+    if (course?.ownerId) {
+      return {
+        id: course.ownerId,
+        email: "",
+        name: "Teacher",
+        picture: "",
+      };
+    }
+  }
+
+  throw new Error("Failed to determine user identity from Google APIs");
 }
