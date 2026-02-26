@@ -144,6 +144,19 @@ function toAnalysisErrorMessage(payload: unknown): string {
   return `${base}${errorClass} - ${path}${message}`;
 }
 
+function toApiErrorMessage(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== "object") {
+    return fallback;
+  }
+
+  const data = payload as { error?: unknown };
+  if (typeof data.error === "string" && data.error.trim().length > 0) {
+    return data.error;
+  }
+
+  return fallback;
+}
+
 export function QuizSyncPanel({ courseId, quizId }: { courseId: string; quizId: string }) {
   const [steps, setSteps] = useState<SyncStep[]>(INITIAL_STEPS);
   const [syncing, setSyncing] = useState(false);
@@ -343,7 +356,7 @@ export function QuizAnalysisPanel({ courseId, quizId }: { courseId: string; quiz
   const [error, setError] = useState<string | null>(null);
   const [showingPreviousResult, setShowingPreviousResult] = useState(false);
   const [summary, setSummary] = useState<AnalysisSummary | null>(null);
-  const [statusText, setStatusText] = useState("Ready to analyze quiz responses");
+  const [statusText, setStatusText] = useState("Ready to sync and analyze quiz responses");
 
   useEffect(() => {
     fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quizId}`)
@@ -371,11 +384,27 @@ export function QuizAnalysisPanel({ courseId, quizId }: { courseId: string; quiz
     setRunning(true);
     setError(null);
     setShowingPreviousResult(false);
-    setStatusText("Preparing quiz data for Gemini...");
+    setStatusText("Syncing classroom roster and metadata...");
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      setStatusText("Sending to Gemini for misconception analysis...");
+      const coursesResponse = await fetch("/api/sync/courses", { method: "POST" });
+      const coursesPayload = await coursesResponse.json().catch(() => ({}));
+      if (!coursesResponse.ok) {
+        throw new Error(toApiErrorMessage(coursesPayload, "Course sync failed"));
+      }
+
+      setStatusText("Syncing latest quiz responses...");
+      const quizSyncResponse = await fetch("/api/sync/quiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId }),
+      });
+      const quizSyncPayload = await quizSyncResponse.json().catch(() => ({}));
+      if (!quizSyncResponse.ok) {
+        throw new Error(toApiErrorMessage(quizSyncPayload, "Quiz sync failed"));
+      }
+
+      setStatusText("Running Gemini misconception analysis...");
 
       const response = await fetch("/api/analyze/run", {
         method: "POST",
@@ -383,21 +412,22 @@ export function QuizAnalysisPanel({ courseId, quizId }: { courseId: string; quiz
         body: JSON.stringify({ courseId, quizId }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new Error(toAnalysisErrorMessage(data));
       }
 
-      setSummary(data.summary);
+      const payload = data as { summary?: AnalysisSummary };
+      setSummary(payload.summary ?? null);
       setComplete(true);
       setShowingPreviousResult(false);
-      setStatusText("Analysis complete");
+      setStatusText("Sync and analysis complete");
     } catch (analysisError) {
-      const message = analysisError instanceof Error ? analysisError.message : "Analysis failed";
+      const message = analysisError instanceof Error ? analysisError.message : "Sync and analysis failed";
       setShowingPreviousResult(hasPreviousCompletedResult);
       setError(message);
-      setStatusText("Analysis failed");
+      setStatusText("Sync and analysis failed");
     }
     setRunning(false);
   }
@@ -430,10 +460,10 @@ export function QuizAnalysisPanel({ courseId, quizId }: { courseId: string; quiz
   return (
     <div>
       <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 4 }}>
-        AI Analysis
+        Sync & Analyze
       </h1>
       <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 20 }}>
-        Gemini-powered misconception analysis
+        Sync data and run Gemini analysis in one section
       </p>
 
       <div className="edu-card edu-fade-in edu-fd2" style={{ padding: 36, textAlign: "center", marginBottom: 20 }}>
@@ -454,7 +484,7 @@ export function QuizAnalysisPanel({ courseId, quizId }: { courseId: string; quiz
               {statusText}
             </p>
             <p className="edu-muted" style={{ fontSize: 12, marginTop: 6 }}>
-              This may take 15-30 seconds
+              This may take 30-60 seconds
             </p>
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </>
@@ -464,7 +494,7 @@ export function QuizAnalysisPanel({ courseId, quizId }: { courseId: string; quiz
           <>
             <p style={{ fontSize: 15, marginBottom: 6 }}>{statusText}</p>
             <p className="edu-muted" style={{ fontSize: 13, marginBottom: 16 }}>
-              Gemini will classify errors into conceptual, procedural, and careless categories
+              If no prior analysis exists, this runs sync first, then analysis automatically
             </p>
           </>
         )}
@@ -474,7 +504,7 @@ export function QuizAnalysisPanel({ courseId, quizId }: { courseId: string; quiz
             {showingPreviousResult ? (
               <>
                 <p style={{ fontSize: 15, color: "#A63D2E", fontWeight: 600, marginBottom: 6 }}>
-                  Analysis failed - showing previous completed analysis
+                  Sync and analysis failed - showing previous completed result
                 </p>
                 {error && (
                   <p className="edu-muted" style={{ fontSize: 12, marginBottom: 12 }}>
@@ -482,12 +512,12 @@ export function QuizAnalysisPanel({ courseId, quizId }: { courseId: string; quiz
                   </p>
                 )}
                 <p style={{ fontSize: 14, color: "#6B7280", fontWeight: 600, marginBottom: 16 }}>
-                  Previous analysis - {summary.studentsAnalyzed} student(s) analyzed
+                  Previous result - {summary.studentsAnalyzed} student(s) analyzed
                 </p>
               </>
             ) : (
               <p style={{ fontSize: 15, color: "#3D7A2E", fontWeight: 600, marginBottom: 16 }}>
-                {"\u2713"} Analysis complete - {summary.studentsAnalyzed} student(s) analyzed
+                {"\u2713"} Sync and analysis complete - {summary.studentsAnalyzed} student(s) analyzed
               </p>
             )}
             <div
@@ -522,7 +552,7 @@ export function QuizAnalysisPanel({ courseId, quizId }: { courseId: string; quiz
       <div style={{ display: "flex", gap: 10 }}>
         {!running && !complete && (
           <button className="edu-btn" onClick={runAnalysis} disabled={running}>
-            {running ? "Running..." : "Run Analysis"}
+            {running ? "Running..." : "Run Sync + Analysis"}
           </button>
         )}
         {!running && complete && (
@@ -531,7 +561,7 @@ export function QuizAnalysisPanel({ courseId, quizId }: { courseId: string; quiz
               <button className="edu-btn">Open Insights</button>
             </Link>
             <button className="edu-btn-outline" onClick={runAnalysis} disabled={running}>
-              Re-run
+              Re-sync & Re-run
             </button>
           </>
         )}
@@ -597,14 +627,14 @@ export function QuizInsightsPanel({ courseId, quizId }: { courseId: string; quiz
         <p className="edu-muted" style={{ marginBottom: 12 }}>
           {runningAnalysis
             ? "Running analysis now..."
-            : "No analysis found. Run analysis to generate class insights."}
+            : "No analysis found. Run Sync & Analyze to generate class insights."}
         </p>
         <div style={{ display: "flex", gap: 10 }}>
           <button className="edu-btn" onClick={runAnalysisInPlace} disabled={runningAnalysis}>
-            {runningAnalysis ? "Running..." : "Run Analysis Now"}
+            {runningAnalysis ? "Running..." : "Run Sync & Analyze"}
           </button>
           <Link href={routes.quizWorkspace(courseId, quizId, { view: "analysis" })}>
-            <button className="edu-btn-outline">Open Analysis Page</button>
+            <button className="edu-btn-outline">Open Sync & Analyze</button>
           </Link>
         </div>
         {actionError && (
@@ -695,7 +725,7 @@ export function QuizInsightsPanel({ courseId, quizId }: { courseId: string; quiz
           <button className="edu-btn">View Students</button>
         </Link>
         <Link href={routes.quizWorkspace(courseId, quizId, { view: "analysis" })}>
-          <button className="edu-btn-outline">Back to Analysis</button>
+          <button className="edu-btn-outline">Back to Sync & Analyze</button>
         </Link>
       </div>
     </div>
@@ -777,14 +807,14 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
         <p className="edu-muted" style={{ marginBottom: 12 }}>
           {runningAnalysis
             ? "Running analysis now..."
-            : "No analysis results. Run analysis to unlock student-level insights."}
+            : "No analysis results. Run Sync & Analyze to unlock student-level insights."}
         </p>
         <div style={{ display: "flex", gap: 10 }}>
           <button className="edu-btn" onClick={runAnalysisInPlace} disabled={runningAnalysis}>
-            {runningAnalysis ? "Running..." : "Run Analysis Now"}
+            {runningAnalysis ? "Running..." : "Run Sync & Analyze"}
           </button>
           <Link href={routes.quizWorkspace(courseId, quizId, { view: "analysis" })}>
-            <button className="edu-btn-outline">Open Analysis Page</button>
+            <button className="edu-btn-outline">Open Sync & Analyze</button>
           </Link>
         </div>
         {actionError && (

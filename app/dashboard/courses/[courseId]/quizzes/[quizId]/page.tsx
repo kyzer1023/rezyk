@@ -9,21 +9,18 @@ import {
   QuizInsightsPanel,
   QuizStudentDetailPanel,
   QuizStudentsPanel,
-  QuizSyncPanel,
 } from "./quiz-workspace-panels";
 
 const VIEW_TABS: Array<{ id: QuizWorkspaceView; label: string }> = [
-  { id: "sync", label: "Sync" },
-  { id: "analysis", label: "Analysis" },
+  { id: "analysis", label: "Sync & Analyze" },
   { id: "insights", label: "Insights" },
   { id: "students", label: "Students" },
 ];
 
 function getViewFromQuery(rawView: string | null): QuizWorkspaceView {
-  if (rawView === "analysis") return "analysis";
   if (rawView === "insights") return "insights";
   if (rawView === "students") return "students";
-  return "sync";
+  return "analysis";
 }
 
 export default function QuizWorkspacePage({
@@ -59,7 +56,6 @@ export default function QuizWorkspacePage({
         )}
       </div>
 
-      {view === "sync" && <QuizSyncPanel courseId={courseId} quizId={quizId} />}
       {view === "analysis" && <QuizAnalysisPanel courseId={courseId} quizId={quizId} />}
       {view === "insights" && <QuizInsightsPanel courseId={courseId} quizId={quizId} />}
       {view === "students" && !studentId && <QuizStudentsPanel courseId={courseId} quizId={quizId} />}

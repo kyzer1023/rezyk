@@ -36,7 +36,7 @@ export const routes = {
     options?: QuizWorkspaceOptions,
   ) => buildQuizWorkspacePath(courseId, quizId, options),
   sync: (courseId: string, quizId: string) =>
-    buildQuizWorkspacePath(courseId, quizId, { view: "sync" }),
+    buildQuizWorkspacePath(courseId, quizId, { view: "analysis" }),
   analysis: (courseId: string, quizId: string) =>
     buildQuizWorkspacePath(courseId, quizId, { view: "analysis" }),
   insights: (courseId: string, quizId: string) =>

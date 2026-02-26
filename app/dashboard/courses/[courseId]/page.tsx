@@ -134,7 +134,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ courseI
                 >
                   {quiz.analysisStatus === "completed" ? "Analyzed" : quiz.analysisStatus === "running" ? "Running" : "Pending"}
                 </span>
-                <Link href={routes.quizWorkspace(courseId, quiz.id, { view: "sync" })}>
+                <Link href={routes.quizWorkspace(courseId, quiz.id, { view: "analysis" })}>
                   <button className="edu-btn-outline" style={{ padding: "4px 12px", fontSize: 12 }}>
                     Open
                   </button>

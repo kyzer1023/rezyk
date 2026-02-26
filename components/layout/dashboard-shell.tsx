@@ -79,16 +79,11 @@ function buildBreadcrumbs(
         viewParam === "sync" || viewParam === "analysis" || viewParam === "insights" || viewParam === "students"
           ? viewParam
           : null;
-      const effectiveView = viewFromQuery ?? "sync";
+      const effectiveView = viewFromQuery ?? "analysis";
 
-      if (effectiveView === "sync") {
+      if (effectiveView === "sync" || effectiveView === "analysis") {
         crumbs.push({
-          label: "Sync",
-          href: routes.quizWorkspace(courseId, quizId, { view: "sync" }),
-        });
-      } else if (effectiveView === "analysis") {
-        crumbs.push({
-          label: "Analysis",
+          label: "Sync & Analyze",
           href: routes.quizWorkspace(courseId, quizId, { view: "analysis" }),
         });
       } else if (effectiveView === "insights") {

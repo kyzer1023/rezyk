@@ -109,9 +109,9 @@ export default function QuizzesPage({ params }: { params: Promise<{ courseId: st
                     </button>
                   </Link>
                 ) : (
-                  <Link href={routes.quizWorkspace(courseId, quiz.id, { view: "sync" })}>
+                  <Link href={routes.quizWorkspace(courseId, quiz.id, { view: "analysis" })}>
                     <button className="edu-btn" style={{ padding: "6px 16px", fontSize: 13 }}>
-                      Start Workflow
+                      Start Sync & Analyze
                     </button>
                   </Link>
                 )}
