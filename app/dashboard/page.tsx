@@ -219,7 +219,7 @@ export default function DashboardPage() {
           <p className="edu-muted" style={{ fontSize: 14, marginBottom: 12 }}>
             {recentQuiz.title} &mdash; {recentQuiz.responseCount} responses
           </p>
-          <Link href={routes.insights(recentQuiz.courseId, recentQuiz.id)}>
+          <Link href={routes.quizWorkspace(recentQuiz.courseId, recentQuiz.id, { view: "insights" })}>
             <button className="edu-btn-outline">View Insights</button>
           </Link>
         </div>

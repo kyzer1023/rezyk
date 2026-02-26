@@ -1,0 +1,1047 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { routes } from "@/lib/routes";
+import ConceptHeatmap from "@/lib/charts/ConceptHeatmap";
+import RiskDistribution from "@/lib/charts/RiskDistribution";
+
+interface SyncStep {
+  id: string;
+  label: string;
+  status: "pending" | "in_progress" | "completed" | "error";
+  detail: string;
+}
+
+const INITIAL_STEPS: SyncStep[] = [
+  { id: "s1", label: "Syncing course data", status: "pending", detail: "" },
+  { id: "s2", label: "Fetching quiz structure from Google Forms", status: "pending", detail: "" },
+  { id: "s3", label: "Downloading student responses", status: "pending", detail: "" },
+  { id: "s4", label: "Saving to database", status: "pending", detail: "" },
+];
+
+interface AnalysisErrorPayload {
+  error?: string;
+  errorClass?: string;
+  diagnostics?: Array<{
+    path?: string;
+    message?: string;
+  }>;
+}
+
+interface AnalysisSummary {
+  studentsAnalyzed: number;
+  riskDistribution: { riskLevel: string; count: number; percentage: number }[];
+  scoreMetrics: { averageScore: number; medianScore: number; averageCompletionRate: number };
+}
+
+interface RiskEntry {
+  riskLevel: string;
+  count: number;
+  percentage: number;
+}
+
+interface ConceptEntry {
+  concept: string;
+  affectedStudentCount: number;
+  questionIds: string[];
+  dominantErrorType: string;
+}
+
+interface ScoreMetrics {
+  averageScore: number;
+  medianScore: number;
+  averageCompletionRate: number;
+}
+
+interface ErrorBreakdown {
+  errorType: string;
+  count: number;
+  percentage: number;
+}
+
+interface AnalysisData {
+  derivedAnalysis: {
+    riskDistribution: RiskEntry[];
+    scoreMetrics: ScoreMetrics;
+    conceptHeatmap: ConceptEntry[];
+    errorTypeBreakdown: ErrorBreakdown[];
+  };
+  modelOutput: {
+    students: StudentAnalysis[];
+  };
+}
+
+type StudentRiskLevel = "low" | "medium" | "high" | "critical";
+
+interface Misconception {
+  concept: string;
+  errorType: string;
+  affectedQuestions: string[];
+  evidence: string;
+}
+
+interface Intervention {
+  type: string;
+  focusArea: string;
+  action: string;
+}
+
+interface StudentAnalysis {
+  studentId: string;
+  riskLevel: StudentRiskLevel;
+  misconceptions: Misconception[];
+  interventions: Intervention[];
+  rationale: string;
+}
+
+const RISK_COLORS: Record<StudentRiskLevel, { bg: string; color: string }> = {
+  critical: { bg: "#FDECEA", color: "#A63D2E" },
+  high: { bg: "#FEF4E5", color: "#A25E1A" },
+  medium: { bg: "#FEF8E7", color: "#8B6914" },
+  low: { bg: "#E9F3E5", color: "#3D7A2E" },
+};
+
+const ERROR_TYPE_COLORS: Record<string, string> = {
+  conceptual: "#A63D2E",
+  procedural: "#A25E1A",
+  careless: "#2B5E9E",
+};
+
+function toAnalysisErrorMessage(payload: unknown): string {
+  if (!payload || typeof payload !== "object") {
+    return "Analysis failed";
+  }
+
+  const result = payload as AnalysisErrorPayload;
+  const base =
+    typeof result.error === "string" && result.error.trim().length > 0
+      ? result.error
+      : "Analysis failed";
+  const errorClass =
+    typeof result.errorClass === "string" && result.errorClass.trim().length > 0
+      ? ` (${result.errorClass})`
+      : "";
+
+  const firstDiagnostic = Array.isArray(result.diagnostics) ? result.diagnostics[0] : undefined;
+  if (!firstDiagnostic || typeof firstDiagnostic !== "object") {
+    return `${base}${errorClass}`;
+  }
+
+  const message =
+    typeof firstDiagnostic.message === "string" && firstDiagnostic.message.trim().length > 0
+      ? firstDiagnostic.message
+      : "";
+  const path =
+    typeof firstDiagnostic.path === "string" && firstDiagnostic.path.trim().length > 0
+      ? `${firstDiagnostic.path}: `
+      : "";
+
+  if (!message) {
+    return `${base}${errorClass}`;
+  }
+
+  return `${base}${errorClass} - ${path}${message}`;
+}
+
+export function QuizSyncPanel({ courseId, quizId }: { courseId: string; quizId: string }) {
+  const [steps, setSteps] = useState<SyncStep[]>(INITIAL_STEPS);
+  const [syncing, setSyncing] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const hasAutoStarted = useRef(false);
+
+  const updateStep = useCallback((id: string, update: Partial<SyncStep>) => {
+    setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, ...update } : s)));
+  }, []);
+
+  const startSync = useCallback(async () => {
+    setSyncing(true);
+    setDone(false);
+    setError(null);
+    setSteps(INITIAL_STEPS);
+
+    try {
+      updateStep("s1", { status: "in_progress" });
+      const coursesRes = await fetch("/api/sync/courses", { method: "POST" });
+      const coursesData = await coursesRes.json();
+      if (!coursesRes.ok) throw new Error(coursesData.error ?? "Course sync failed");
+      const courseCount = coursesData.courses?.length ?? 0;
+      updateStep("s1", { status: "completed", detail: `${courseCount} course(s) synced` });
+
+      updateStep("s2", { status: "in_progress" });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      updateStep("s2", { status: "completed", detail: "Form structure loaded" });
+
+      updateStep("s3", { status: "in_progress" });
+      const quizRes = await fetch("/api/sync/quiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId }),
+      });
+      const quizData = await quizRes.json();
+      if (!quizRes.ok) throw new Error(quizData.error ?? "Quiz sync failed");
+      const quizCount = quizData.quizzes?.length ?? 0;
+      const totalResponses = (quizData.quizzes ?? []).reduce(
+        (sum: number, q: { responseCount: number }) => sum + q.responseCount,
+        0,
+      );
+      updateStep("s3", {
+        status: "completed",
+        detail: `${totalResponses} responses across ${quizCount} quiz(es)`,
+      });
+
+      updateStep("s4", { status: "in_progress" });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      updateStep("s4", { status: "completed", detail: "All data persisted" });
+
+      setDone(true);
+    } catch (syncError) {
+      const message = syncError instanceof Error ? syncError.message : "Sync failed";
+      setError(message);
+      setSteps((prev) =>
+        prev.map((step) =>
+          step.status === "in_progress" ? { ...step, status: "error", detail: message } : step,
+        ),
+      );
+    }
+    setSyncing(false);
+  }, [courseId, updateStep]);
+
+  useEffect(() => {
+    if (hasAutoStarted.current) return;
+    hasAutoStarted.current = true;
+    void startSync();
+  }, [startSync]);
+
+  return (
+    <div>
+      <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 4 }}>
+        Data Sync
+      </h1>
+      <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 20 }}>
+        Sync quiz data from Google Classroom and Forms (starts automatically)
+      </p>
+
+      <div className="edu-card edu-fade-in edu-fd2" style={{ padding: 24, marginBottom: 20 }}>
+        {steps.map((step, index) => (
+          <div
+            key={step.id}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+              padding: "10px 0",
+              borderBottom: index < steps.length - 1 ? "1px solid #F0ECE5" : "none",
+            }}
+          >
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 11,
+                fontWeight: 700,
+                background:
+                  step.status === "completed"
+                    ? "#E9F3E5"
+                    : step.status === "in_progress"
+                      ? "#FEF8E7"
+                      : step.status === "error"
+                        ? "#FDECEA"
+                        : "#F0ECE5",
+                color:
+                  step.status === "completed"
+                    ? "#3D7A2E"
+                    : step.status === "in_progress"
+                      ? "#8B6914"
+                      : step.status === "error"
+                        ? "#A63D2E"
+                        : "#B5AA9C",
+                transition: "all 0.3s",
+              }}
+            >
+              {step.status === "completed"
+                ? "\u2713"
+                : step.status === "error"
+                  ? "\u2717"
+                  : step.status === "in_progress"
+                    ? "\u2022"
+                    : index + 1}
+            </div>
+            <div style={{ flex: 1 }}>
+              <p
+                style={{
+                  fontSize: 14,
+                  fontWeight: step.status === "in_progress" ? 600 : 400,
+                  color:
+                    step.status === "completed"
+                      ? "#3D7A2E"
+                      : step.status === "in_progress"
+                        ? "#8B6914"
+                        : step.status === "error"
+                          ? "#A63D2E"
+                          : "#8A7D6F",
+                }}
+              >
+                {step.label}
+              </p>
+              {step.detail && (
+                <p className="edu-muted" style={{ fontSize: 12 }}>
+                  {step.detail}
+                </p>
+              )}
+            </div>
+            {step.status === "in_progress" && (
+              <div
+                style={{
+                  width: 16,
+                  height: 16,
+                  border: "2px solid #E8DFD4",
+                  borderTopColor: "#C17A56",
+                  borderRadius: "50%",
+                  animation: "spin 0.8s linear infinite",
+                }}
+              />
+            )}
+          </div>
+        ))}
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+
+      {error && (
+        <p style={{ color: "#A63D2E", fontSize: 13, marginBottom: 14 }}>{error}</p>
+      )}
+
+      <div style={{ display: "flex", gap: 10 }}>
+        {!done && (
+          <button className="edu-btn" onClick={startSync} disabled={syncing}>
+            {syncing ? "Syncing..." : "Start Sync"}
+          </button>
+        )}
+        {done && (
+          <Link href={routes.quizWorkspace(courseId, quizId, { view: "analysis" })}>
+            <button className="edu-btn">Proceed to Analysis</button>
+          </Link>
+        )}
+        {done && (
+          <button className="edu-btn-outline" onClick={startSync}>
+            Re-sync
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function QuizAnalysisPanel({ courseId, quizId }: { courseId: string; quizId: string }) {
+  const [running, setRunning] = useState(false);
+  const [complete, setComplete] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showingPreviousResult, setShowingPreviousResult] = useState(false);
+  const [summary, setSummary] = useState<AnalysisSummary | null>(null);
+  const [statusText, setStatusText] = useState("Ready to analyze quiz responses");
+
+  useEffect(() => {
+    fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quizId}`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.found) {
+          setComplete(true);
+          setShowingPreviousResult(false);
+          setSummary({
+            studentsAnalyzed: data.modelOutput?.students?.length ?? 0,
+            riskDistribution: data.derivedAnalysis?.riskDistribution ?? [],
+            scoreMetrics: data.derivedAnalysis?.scoreMetrics ?? {
+              averageScore: 0,
+              medianScore: 0,
+              averageCompletionRate: 0,
+            },
+          });
+        }
+      })
+      .catch(() => {});
+  }, [courseId, quizId]);
+
+  async function runAnalysis() {
+    const hasPreviousCompletedResult = complete && summary !== null;
+    setRunning(true);
+    setError(null);
+    setShowingPreviousResult(false);
+    setStatusText("Preparing quiz data for Gemini...");
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      setStatusText("Sending to Gemini for misconception analysis...");
+
+      const response = await fetch("/api/analyze/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId, quizId }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(toAnalysisErrorMessage(data));
+      }
+
+      setSummary(data.summary);
+      setComplete(true);
+      setShowingPreviousResult(false);
+      setStatusText("Analysis complete");
+    } catch (analysisError) {
+      const message = analysisError instanceof Error ? analysisError.message : "Analysis failed";
+      setShowingPreviousResult(hasPreviousCompletedResult);
+      setError(message);
+      setStatusText("Analysis failed");
+    }
+    setRunning(false);
+  }
+
+  const errorTypes = summary
+    ? [
+        {
+          pct: `${summary.riskDistribution.find((risk) => risk.riskLevel === "critical")?.percentage ?? 0}%`,
+          label: "Critical",
+          color: "#A63D2E",
+        },
+        {
+          pct: `${summary.riskDistribution.find((risk) => risk.riskLevel === "high")?.percentage ?? 0}%`,
+          label: "High Risk",
+          color: "#A25E1A",
+        },
+        {
+          pct: `${summary.riskDistribution.find((risk) => risk.riskLevel === "medium")?.percentage ?? 0}%`,
+          label: "Medium",
+          color: "#8B6914",
+        },
+        {
+          pct: `${summary.riskDistribution.find((risk) => risk.riskLevel === "low")?.percentage ?? 0}%`,
+          label: "Low Risk",
+          color: "#2B5E9E",
+        },
+      ]
+    : [];
+
+  return (
+    <div>
+      <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 4 }}>
+        AI Analysis
+      </h1>
+      <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 20 }}>
+        Gemini-powered misconception analysis
+      </p>
+
+      <div className="edu-card edu-fade-in edu-fd2" style={{ padding: 36, textAlign: "center", marginBottom: 20 }}>
+        {running && (
+          <>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                border: "3px solid #E8DFD4",
+                borderTopColor: "#C17A56",
+                borderRadius: "50%",
+                animation: "spin 0.8s linear infinite",
+                margin: "0 auto 16px",
+              }}
+            />
+            <p style={{ fontSize: 14, color: "#8B6914", fontWeight: 500 }}>
+              {statusText}
+            </p>
+            <p className="edu-muted" style={{ fontSize: 12, marginTop: 6 }}>
+              This may take 15-30 seconds
+            </p>
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          </>
+        )}
+
+        {!running && !complete && (
+          <>
+            <p style={{ fontSize: 15, marginBottom: 6 }}>{statusText}</p>
+            <p className="edu-muted" style={{ fontSize: 13, marginBottom: 16 }}>
+              Gemini will classify errors into conceptual, procedural, and careless categories
+            </p>
+          </>
+        )}
+
+        {!running && complete && summary && (
+          <>
+            {showingPreviousResult ? (
+              <>
+                <p style={{ fontSize: 15, color: "#A63D2E", fontWeight: 600, marginBottom: 6 }}>
+                  Analysis failed - showing previous completed analysis
+                </p>
+                {error && (
+                  <p className="edu-muted" style={{ fontSize: 12, marginBottom: 12 }}>
+                    {error}
+                  </p>
+                )}
+                <p style={{ fontSize: 14, color: "#6B7280", fontWeight: 600, marginBottom: 16 }}>
+                  Previous analysis - {summary.studentsAnalyzed} student(s) analyzed
+                </p>
+              </>
+            ) : (
+              <p style={{ fontSize: 15, color: "#3D7A2E", fontWeight: 600, marginBottom: 16 }}>
+                {"\u2713"} Analysis complete - {summary.studentsAnalyzed} student(s) analyzed
+              </p>
+            )}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: `repeat(${errorTypes.length}, 1fr)`,
+                gap: 12,
+                maxWidth: 400,
+                margin: "0 auto",
+              }}
+            >
+              {errorTypes.map((item) => (
+                <div key={item.label}>
+                  <p style={{ fontSize: 22, fontWeight: 700, color: item.color }}>{item.pct}</p>
+                  <p className="edu-muted" style={{ fontSize: 11 }}>{item.label}</p>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 16, display: "flex", gap: 12, justifyContent: "center", fontSize: 13 }}>
+              <span>Avg: <strong>{summary.scoreMetrics.averageScore.toFixed(1)}%</strong></span>
+              <span>Median: <strong>{summary.scoreMetrics.medianScore.toFixed(1)}%</strong></span>
+              <span>Completion: <strong>{summary.scoreMetrics.averageCompletionRate.toFixed(0)}%</strong></span>
+            </div>
+          </>
+        )}
+
+        {error && !showingPreviousResult && (
+          <p style={{ color: "#A63D2E", fontSize: 13, marginTop: 10 }}>{error}</p>
+        )}
+      </div>
+
+      <div style={{ display: "flex", gap: 10 }}>
+        {!running && !complete && (
+          <button className="edu-btn" onClick={runAnalysis} disabled={running}>
+            {running ? "Running..." : "Run Analysis"}
+          </button>
+        )}
+        {!running && complete && (
+          <>
+            <Link href={routes.quizWorkspace(courseId, quizId, { view: "insights" })}>
+              <button className="edu-btn">Open Insights</button>
+            </Link>
+            <button className="edu-btn-outline" onClick={runAnalysis} disabled={running}>
+              Re-run
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function QuizInsightsPanel({ courseId, quizId }: { courseId: string; quizId: string }) {
+  const [data, setData] = useState<AnalysisData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [runningAnalysis, setRunningAnalysis] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const loadAnalysis = useCallback(async () => {
+    const response = await fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quizId}`, {
+      cache: "no-store",
+    });
+    const payload = (await response.json()) as AnalysisData & { found?: boolean };
+    if (payload.found) {
+      setData(payload);
+    } else {
+      setData(null);
+    }
+  }, [courseId, quizId]);
+
+  useEffect(() => {
+    loadAnalysis()
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [loadAnalysis]);
+
+  async function runAnalysisInPlace() {
+    setRunningAnalysis(true);
+    setActionError(null);
+    try {
+      const response = await fetch("/api/analyze/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId, quizId }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        setActionError(payload.error ?? "Failed to run analysis.");
+        return;
+      }
+      await loadAnalysis();
+    } catch {
+      setActionError("Failed to run analysis.");
+    } finally {
+      setRunningAnalysis(false);
+    }
+  }
+
+  if (loading) {
+    return <p className="edu-muted">Loading insights...</p>;
+  }
+
+  if (!data) {
+    return (
+      <div>
+        <h1 className="edu-heading" style={{ fontSize: 22, marginBottom: 12 }}>Class Insights</h1>
+        <p className="edu-muted" style={{ marginBottom: 12 }}>
+          {runningAnalysis
+            ? "Running analysis now..."
+            : "No analysis found. Run analysis to generate class insights."}
+        </p>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button className="edu-btn" onClick={runAnalysisInPlace} disabled={runningAnalysis}>
+            {runningAnalysis ? "Running..." : "Run Analysis Now"}
+          </button>
+          <Link href={routes.quizWorkspace(courseId, quizId, { view: "analysis" })}>
+            <button className="edu-btn-outline">Open Analysis Page</button>
+          </Link>
+        </div>
+        {actionError && (
+          <p style={{ color: "#A63D2E", fontSize: 12, marginTop: 10 }}>{actionError}</p>
+        )}
+      </div>
+    );
+  }
+
+  const { riskDistribution, scoreMetrics, conceptHeatmap, errorTypeBreakdown } = data.derivedAnalysis;
+  const atRiskCount = riskDistribution
+    .filter((risk) => risk.riskLevel === "critical" || risk.riskLevel === "high")
+    .reduce((sum, risk) => sum + risk.count, 0);
+
+  const riskChartData = riskDistribution.map((risk) => ({
+    level: risk.riskLevel as "low" | "medium" | "high" | "critical",
+    count: risk.count,
+    percentage: risk.percentage,
+  }));
+
+  const heatmapData = conceptHeatmap.map((concept) => ({
+    concept: concept.concept,
+    questionIds: concept.questionIds,
+    correctRate: 1 - concept.affectedStudentCount / (data.modelOutput.students.length || 1),
+    studentsMastered: (data.modelOutput.students.length || 0) - concept.affectedStudentCount,
+    studentsStruggling: concept.affectedStudentCount,
+    dominantErrorType: concept.dominantErrorType as "conceptual" | "procedural" | "careless",
+  }));
+
+  return (
+    <div>
+      <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 4 }}>
+        Class Insights
+      </h1>
+      <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 20 }}>
+        AI-generated analysis results
+      </p>
+
+      <div className="edu-fade-in edu-fd1" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
+        {[
+          { label: "Average Score", value: `${scoreMetrics.averageScore.toFixed(1)}%`, color: "#C17A56" },
+          { label: "Median Score", value: `${scoreMetrics.medianScore.toFixed(1)}%`, color: "#6B8E5C" },
+          { label: "Completion Rate", value: `${scoreMetrics.averageCompletionRate.toFixed(0)}%`, color: "#2B5E9E" },
+          { label: "At-Risk Students", value: String(atRiskCount), color: "#A63D2E" },
+        ].map((stat) => (
+          <div key={stat.label} className="edu-card" style={{ padding: 18 }}>
+            <p className="edu-muted" style={{ fontSize: 11, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.8 }}>
+              {stat.label}
+            </p>
+            <p style={{ fontSize: 24, fontWeight: 700, color: stat.color, margin: 0 }}>{stat.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="edu-fade-in edu-fd2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
+        <div className="edu-card" style={{ padding: 24 }}>
+          <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14 }}>Risk Distribution</h3>
+          <RiskDistribution data={riskChartData} />
+        </div>
+        <div className="edu-card" style={{ padding: 24 }}>
+          <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14 }}>Error Type Breakdown</h3>
+          {errorTypeBreakdown.map((errorType) => (
+            <div key={errorType.errorType} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #F0ECE5" }}>
+              <span style={{ fontSize: 14, textTransform: "capitalize" }}>{errorType.errorType}</span>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div style={{ width: 80, height: 6, background: "#F0ECE5", borderRadius: 3 }}>
+                  <div style={{
+                    width: `${errorType.percentage}%`,
+                    height: "100%",
+                    borderRadius: 3,
+                    background: errorType.errorType === "conceptual" ? "#A63D2E" : errorType.errorType === "procedural" ? "#A25E1A" : "#2B5E9E",
+                  }} />
+                </div>
+                <span className="edu-muted" style={{ fontSize: 12, minWidth: 36, textAlign: "right" }}>{errorType.percentage}%</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="edu-card edu-fade-in edu-fd3" style={{ padding: 24, marginBottom: 20 }}>
+        <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14 }}>Concept Mastery</h3>
+        <ConceptHeatmap data={heatmapData} />
+      </div>
+
+      <div style={{ display: "flex", gap: 10 }}>
+        <Link href={routes.quizWorkspace(courseId, quizId, { view: "students" })}>
+          <button className="edu-btn">View Students</button>
+        </Link>
+        <Link href={routes.quizWorkspace(courseId, quizId, { view: "analysis" })}>
+          <button className="edu-btn-outline">Back to Analysis</button>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quizId: string }) {
+  const [students, setStudents] = useState<StudentAnalysis[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [riskFilter, setRiskFilter] = useState("all");
+  const [emailMap, setEmailMap] = useState<Record<string, string>>({});
+  const [runningAnalysis, setRunningAnalysis] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const loadStudents = useCallback(async () => {
+    const response = await fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quizId}`, {
+      cache: "no-store",
+    });
+    const data = (await response.json()) as {
+      found?: boolean;
+      modelOutput?: { students?: StudentAnalysis[] };
+      emailMapping?: Record<string, string>;
+    };
+    if (data.found) {
+      setStudents(data.modelOutput?.students ?? []);
+      setEmailMap(data.emailMapping ?? {});
+    } else {
+      setStudents([]);
+      setEmailMap({});
+    }
+  }, [courseId, quizId]);
+
+  useEffect(() => {
+    loadStudents()
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [loadStudents]);
+
+  async function runAnalysisInPlace() {
+    setRunningAnalysis(true);
+    setActionError(null);
+    try {
+      const response = await fetch("/api/analyze/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId, quizId }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        setActionError(payload.error ?? "Failed to run analysis.");
+        return;
+      }
+      await loadStudents();
+    } catch {
+      setActionError("Failed to run analysis.");
+    } finally {
+      setRunningAnalysis(false);
+    }
+  }
+
+  const filtered = students
+    .filter((student) => riskFilter === "all" || student.riskLevel === riskFilter)
+    .filter((student) => {
+      if (!search) return true;
+      const email = emailMap[student.studentId] ?? "";
+      return student.studentId.toLowerCase().includes(search.toLowerCase()) || email.toLowerCase().includes(search.toLowerCase());
+    });
+
+  const riskOrder: StudentRiskLevel[] = ["critical", "high", "medium", "low"];
+  const sorted = [...filtered].sort((studentA, studentB) => riskOrder.indexOf(studentA.riskLevel) - riskOrder.indexOf(studentB.riskLevel));
+
+  if (loading) return <p className="edu-muted">Loading students...</p>;
+
+  if (students.length === 0) {
+    return (
+      <div>
+        <h1 className="edu-heading" style={{ fontSize: 22, marginBottom: 12 }}>Students</h1>
+        <p className="edu-muted" style={{ marginBottom: 12 }}>
+          {runningAnalysis
+            ? "Running analysis now..."
+            : "No analysis results. Run analysis to unlock student-level insights."}
+        </p>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button className="edu-btn" onClick={runAnalysisInPlace} disabled={runningAnalysis}>
+            {runningAnalysis ? "Running..." : "Run Analysis Now"}
+          </button>
+          <Link href={routes.quizWorkspace(courseId, quizId, { view: "analysis" })}>
+            <button className="edu-btn-outline">Open Analysis Page</button>
+          </Link>
+        </div>
+        {actionError && (
+          <p style={{ color: "#A63D2E", fontSize: 12, marginTop: 10 }}>{actionError}</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 4 }}>Students</h1>
+      <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 16 }}>
+        {students.length} student(s) analyzed
+      </p>
+
+      <div className="edu-fade-in edu-fd1" style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+        <input
+          type="text"
+          placeholder="Search by name or email..."
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          style={{
+            flex: 1,
+            padding: "8px 14px",
+            border: "1px solid #E8DFD4",
+            borderRadius: 6,
+            fontSize: 13,
+            background: "#FFF",
+            outline: "none",
+          }}
+        />
+        <select
+          value={riskFilter}
+          onChange={(event) => setRiskFilter(event.target.value)}
+          style={{
+            padding: "8px 14px",
+            border: "1px solid #E8DFD4",
+            borderRadius: 6,
+            fontSize: 13,
+            background: "#FFF",
+          }}
+        >
+          <option value="all">All Risks</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+
+      <div className="edu-card edu-fade-in edu-fd2" style={{ padding: 0, overflow: "hidden" }}>
+        {sorted.map((student, index) => {
+          const risk = RISK_COLORS[student.riskLevel] ?? RISK_COLORS.low;
+          const email = emailMap[student.studentId] ?? student.studentId;
+          const displayName = email.split("@")[0].replace(/[._]/g, " ");
+          return (
+            <div
+              key={student.studentId}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "14px 20px",
+                borderBottom: index < sorted.length - 1 ? "1px solid #F0ECE5" : "none",
+              }}
+            >
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 500, margin: 0, textTransform: "capitalize" }}>{displayName}</p>
+                <p className="edu-muted" style={{ fontSize: 12, margin: "2px 0 0" }}>
+                  {student.misconceptions.length} misconception(s) &middot; {email}
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    padding: "3px 10px",
+                    borderRadius: 4,
+                    background: risk.bg,
+                    color: risk.color,
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {student.riskLevel}
+                </span>
+                <Link href={routes.quizWorkspace(courseId, quizId, { view: "students", studentId: student.studentId })}>
+                  <button className="edu-btn-outline" style={{ padding: "4px 12px", fontSize: 12 }}>
+                    Details
+                  </button>
+                </Link>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function QuizStudentDetailPanel({
+  courseId,
+  quizId,
+  studentId,
+}: {
+  courseId: string;
+  quizId: string;
+  studentId: string;
+}) {
+  const [student, setStudent] = useState<StudentAnalysis | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [emailMap, setEmailMap] = useState<Record<string, string>>({});
+  const [allStudents, setAllStudents] = useState<StudentAnalysis[]>([]);
+
+  useEffect(() => {
+    fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quizId}`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.found) {
+          const students: StudentAnalysis[] = data.modelOutput?.students ?? [];
+          setAllStudents(students);
+          setEmailMap(data.emailMapping ?? {});
+          const found = students.find((entry) => entry.studentId === studentId);
+          setStudent(found ?? null);
+        } else {
+          setStudent(null);
+          setAllStudents([]);
+          setEmailMap({});
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [courseId, quizId, studentId]);
+
+  if (loading) return <p className="edu-muted">Loading student details...</p>;
+  if (!student) {
+    return (
+      <div>
+        <h1 className="edu-heading" style={{ fontSize: 22 }}>Student Not Found</h1>
+        <Link href={routes.quizWorkspace(courseId, quizId, { view: "students" })}>
+          <button className="edu-btn-outline" style={{ marginTop: 12 }}>Back to Students</button>
+        </Link>
+      </div>
+    );
+  }
+
+  const risk = RISK_COLORS[student.riskLevel] ?? RISK_COLORS.low;
+  const email = emailMap[student.studentId] ?? student.studentId;
+  const displayName = email.split("@")[0].replace(/[._]/g, " ");
+
+  const riskOrder: StudentRiskLevel[] = ["critical", "high", "medium", "low"];
+  const atRisk = allStudents
+    .filter((entry) => entry.riskLevel === "critical" || entry.riskLevel === "high")
+    .sort((entryA, entryB) => riskOrder.indexOf(entryA.riskLevel) - riskOrder.indexOf(entryB.riskLevel));
+  const currentIndex = atRisk.findIndex((entry) => entry.studentId === studentId);
+  const nextStudent = currentIndex >= 0 && currentIndex < atRisk.length - 1 ? atRisk[currentIndex + 1] : atRisk[0];
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+        <div>
+          <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 4, textTransform: "capitalize" }}>
+            {displayName}
+          </h1>
+          <p className="edu-muted edu-fade-in edu-fd1" style={{ fontSize: 13 }}>{email}</p>
+        </div>
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            padding: "5px 14px",
+            borderRadius: 6,
+            background: risk.bg,
+            color: risk.color,
+            textTransform: "capitalize",
+          }}
+        >
+          {student.riskLevel} Risk
+        </span>
+      </div>
+
+      <div className="edu-card edu-fade-in edu-fd1" style={{ padding: 20, marginBottom: 14 }}>
+        <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 10 }}>Rationale</h3>
+        <p style={{ fontSize: 14, lineHeight: 1.6, color: "#5A5048" }}>{student.rationale}</p>
+      </div>
+
+      <div className="edu-card edu-fade-in edu-fd2" style={{ padding: 20, marginBottom: 14 }}>
+        <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14 }}>
+          Knowledge Gaps ({student.misconceptions.length})
+        </h3>
+        {student.misconceptions.map((misconception, index) => (
+          <div key={index} style={{ padding: "12px 0", borderBottom: index < student.misconceptions.length - 1 ? "1px solid #F0ECE5" : "none" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>{misconception.concept}</p>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  padding: "2px 8px",
+                  borderRadius: 3,
+                  color: ERROR_TYPE_COLORS[misconception.errorType] ?? "#8A7D6F",
+                  background: "#F5F0E9",
+                  textTransform: "uppercase",
+                }}
+              >
+                {misconception.errorType}
+              </span>
+            </div>
+            <p className="edu-muted" style={{ fontSize: 13, lineHeight: 1.5 }}>{misconception.evidence}</p>
+            <p style={{ fontSize: 11, color: "#B5AA9C", marginTop: 4 }}>
+              Questions: {misconception.affectedQuestions.join(", ")}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="edu-card edu-fade-in edu-fd3" style={{ padding: 20, marginBottom: 20 }}>
+        <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14 }}>
+          Recommended Interventions ({student.interventions.length})
+        </h3>
+        {student.interventions.map((intervention, index) => (
+          <div key={index} style={{ padding: "12px 0", borderBottom: index < student.interventions.length - 1 ? "1px solid #F0ECE5" : "none" }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  padding: "2px 8px",
+                  borderRadius: 3,
+                  background: "#E9F3E5",
+                  color: "#3D7A2E",
+                  textTransform: "uppercase",
+                }}
+              >
+                {intervention.type}
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>{intervention.focusArea}</span>
+            </div>
+            <p style={{ fontSize: 13, color: "#5A5048", lineHeight: 1.5 }}>{intervention.action}</p>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 10 }}>
+        {nextStudent && nextStudent.studentId !== studentId && (
+          <Link href={routes.quizWorkspace(courseId, quizId, { view: "students", studentId: nextStudent.studentId })}>
+            <button className="edu-btn">Next At-Risk Student</button>
+          </Link>
+        )}
+        <Link href={routes.quizWorkspace(courseId, quizId, { view: "insights" })}>
+          <button className="edu-btn-outline">Back to Insights</button>
+        </Link>
+        <Link href={routes.quizWorkspace(courseId, quizId, { view: "students" })}>
+          <button className="edu-btn-outline">All Students</button>
+        </Link>
+      </div>
+    </div>
+  );
+}

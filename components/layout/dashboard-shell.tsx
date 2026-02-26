@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { routes } from "@/lib/routes";
 
 type Breadcrumb = { label: string; href: string };
@@ -50,7 +50,11 @@ const navItems = [
   },
 ];
 
-function buildBreadcrumbs(pathname: string): Breadcrumb[] {
+function buildBreadcrumbs(
+  pathname: string,
+  viewParam: string | null,
+  studentIdParam: string | null,
+): Breadcrumb[] {
   const crumbs: Breadcrumb[] = [{ label: "Dashboard", href: routes.dashboard() }];
   if (!pathname.includes("/courses")) {
     return crumbs;
@@ -69,16 +73,42 @@ function buildBreadcrumbs(pathname: string): Breadcrumb[] {
     const quizMatch = pathname.match(/quizzes\/([^/]+)/);
     if (quizMatch) {
       const quizId = quizMatch[1];
-      if (pathname.includes("/sync")) {
-        crumbs.push({ label: "Sync", href: pathname });
-      } else if (pathname.includes("/analysis")) {
-        crumbs.push({ label: "Analysis", href: pathname });
-      } else if (pathname.includes("/insights")) {
-        crumbs.push({ label: "Insights", href: pathname });
-      } else if (pathname.includes("/students")) {
-        crumbs.push({ label: "Students", href: routes.students(courseId, quizId) });
-        if (pathname.match(/students\/[^/]+$/)) {
-          crumbs.push({ label: "Detail", href: pathname });
+      crumbs.push({ label: "Quiz", href: routes.quizWorkspace(courseId, quizId) });
+
+      const viewFromQuery =
+        viewParam === "sync" || viewParam === "analysis" || viewParam === "insights" || viewParam === "students"
+          ? viewParam
+          : null;
+      const effectiveView = viewFromQuery ?? "sync";
+
+      if (effectiveView === "sync") {
+        crumbs.push({
+          label: "Sync",
+          href: routes.quizWorkspace(courseId, quizId, { view: "sync" }),
+        });
+      } else if (effectiveView === "analysis") {
+        crumbs.push({
+          label: "Analysis",
+          href: routes.quizWorkspace(courseId, quizId, { view: "analysis" }),
+        });
+      } else if (effectiveView === "insights") {
+        crumbs.push({
+          label: "Insights",
+          href: routes.quizWorkspace(courseId, quizId, { view: "insights" }),
+        });
+      } else if (effectiveView === "students") {
+        crumbs.push({
+          label: "Students",
+          href: routes.quizWorkspace(courseId, quizId, { view: "students" }),
+        });
+        if (studentIdParam) {
+          crumbs.push({
+            label: "Detail",
+            href: routes.quizWorkspace(courseId, quizId, {
+              view: "students",
+              studentId: studentIdParam,
+            }),
+          });
         }
       }
     }
@@ -89,6 +119,32 @@ function buildBreadcrumbs(pathname: string): Breadcrumb[] {
   }
 
   return crumbs;
+}
+
+function BreadcrumbTrail({ pathname }: { pathname: string }) {
+  const searchParams = useSearchParams();
+  const breadcrumbs = buildBreadcrumbs(
+    pathname,
+    searchParams.get("view"),
+    searchParams.get("studentId"),
+  );
+
+  return (
+    <>
+      {breadcrumbs.map((crumb, index) => (
+        <span key={crumb.href} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {index > 0 && <span style={{ color: "#D6CBBF" }}>/</span>}
+          {index === breadcrumbs.length - 1 ? (
+            <span style={{ fontWeight: 600, color: "#C17A56" }}>{crumb.label}</span>
+          ) : (
+            <Link href={crumb.href} style={{ color: "#B5AA9C", textDecoration: "none" }}>
+              {crumb.label}
+            </Link>
+          )}
+        </span>
+      ))}
+    </>
+  );
 }
 
 function formatLastSync(lastAutoSyncAt: number): string {
@@ -116,7 +172,6 @@ export default function DashboardShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const breadcrumbs = buildBreadcrumbs(pathname);
   const [user, setUser] = useState<UserInfo | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatusResponse | null>(null);
   const [bootstrap, setBootstrap] = useState<BootstrapStatusResponse | null>(null);
@@ -260,10 +315,14 @@ export default function DashboardShell({
       <aside
         style={{
           width: 230,
+          height: "100vh",
           padding: "22px 0",
           display: "flex",
           flexDirection: "column",
           flexShrink: 0,
+          position: "sticky",
+          top: 0,
+          alignSelf: "flex-start",
           background: "#FFFFFF",
           borderRight: "1px solid #E8DFD4",
         }}
@@ -481,18 +540,9 @@ export default function DashboardShell({
             background: "#FFFFFF",
           }}
         >
-          {breadcrumbs.map((crumb, index) => (
-            <span key={crumb.href} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              {index > 0 && <span style={{ color: "#D6CBBF" }}>/</span>}
-              {index === breadcrumbs.length - 1 ? (
-                <span style={{ fontWeight: 600, color: "#C17A56" }}>{crumb.label}</span>
-              ) : (
-                <Link href={crumb.href} style={{ color: "#B5AA9C", textDecoration: "none" }}>
-                  {crumb.label}
-                </Link>
-              )}
-            </span>
-          ))}
+          <Suspense fallback={<span style={{ color: "#B5AA9C" }}>Dashboard</span>}>
+            <BreadcrumbTrail pathname={pathname} />
+          </Suspense>
         </div>
         {authStatus?.authenticated && bootstrap && (
           <div

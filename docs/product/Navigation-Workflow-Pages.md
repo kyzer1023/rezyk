@@ -13,11 +13,12 @@ Route model decision: use course-scoped (and quiz-scoped) routing as canonical, 
 - `/dashboard/courses` - Course list and selection
 - `/dashboard/courses/[courseId]` - Course overview and quick actions
 - `/dashboard/courses/[courseId]/quizzes` - Quiz list and selection
-- `/dashboard/courses/[courseId]/quizzes/[quizId]/sync` - Data sync progress and results
-- `/dashboard/courses/[courseId]/quizzes/[quizId]/analysis` - Analysis run status and controls
-- `/dashboard/courses/[courseId]/quizzes/[quizId]/insights` - Class heatmap and risk distribution
-- `/dashboard/courses/[courseId]/quizzes/[quizId]/students` - Student list with risk filters
-- `/dashboard/courses/[courseId]/quizzes/[quizId]/students/[studentId]` - Student detail and interventions
+- `/dashboard/courses/[courseId]/quizzes/[quizId]` - Canonical quiz workspace route
+  - `?view=sync` - Data sync progress and results
+  - `?view=analysis` - Analysis run status and controls
+  - `?view=insights` - Class heatmap and risk distribution
+  - `?view=students` - Student list with risk filters
+  - `?view=students&studentId=...` - Student detail and interventions
 - `/dashboard/courses/[courseId]/history` - Trend and historical quiz comparisons in the selected course
 - `/settings` - Account, integration scopes, and reconnect actions
 - `/error` - Unified recoverable error page
@@ -105,71 +106,31 @@ Primary actions:
 - `Start Quiz Workflow`
 
 Next route:
-- Start -> `/dashboard/courses/[courseId]/quizzes/[quizId]/sync`
+- Start -> `/dashboard/courses/[courseId]/quizzes/[quizId]?view=sync`
 
-### `/dashboard/courses/[courseId]/quizzes/[quizId]/sync`
+### `/dashboard/courses/[courseId]/quizzes/[quizId]` (Quiz Workspace)
 Purpose:
-- Show ingest progress for roster, metadata, responses.
+- Use one canonical page for sync, analysis, insights, and students without deeper URL nesting.
 
 Primary actions:
-- `Start Sync`
-- `Retry Failed Sync`
-- `Proceed to Analysis`
-
-Next route:
-- Success -> `/dashboard/courses/[courseId]/quizzes/[quizId]/analysis`
-- Failure -> `/error` (or stay with retry)
-
-### `/dashboard/courses/[courseId]/quizzes/[quizId]/analysis`
-Purpose:
-- Trigger and monitor Gemini analysis pipeline.
-
-Primary actions:
-- `Run Analysis`
-- `Re-run Analysis`
-- `Open Class Insights`
-
-Next route:
-- Success -> `/dashboard/courses/[courseId]/quizzes/[quizId]/insights`
-- Failure -> `/error` (or stay with retry)
-
-### `/dashboard/courses/[courseId]/quizzes/[quizId]/insights`
-Purpose:
-- Present class-level concept heatmap and risk summary.
-
-Primary actions:
-- `Filter by Risk`
-- `Open Student List`
-- `Open History`
-
-Next route:
-- Students -> `/dashboard/courses/[courseId]/quizzes/[quizId]/students`
-- History -> `/dashboard/courses/[courseId]/history`
-
-### `/dashboard/courses/[courseId]/quizzes/[quizId]/students`
-Purpose:
-- List students by risk and weak concept tags for the selected quiz only.
-
-Primary actions:
-- `Search Student`
-- `Filter Risk Level`
+- `Switch View` (`sync`, `analysis`, `insights`, `students`)
+- `Run Sync / Analysis`
 - `Open Student Detail`
+- `Back to Student List`
+
+View states:
+- `?view=sync` -> Show ingest progress for roster, metadata, and responses.
+- `?view=analysis` -> Trigger and monitor Gemini analysis pipeline.
+- `?view=insights` -> Present class-level concept heatmap and risk summary.
+- `?view=students` -> List students by risk and weak concept tags.
+- `?view=students&studentId=...` -> Show individual gaps, error types, and interventions.
 
 Next route:
-- Detail -> `/dashboard/courses/[courseId]/quizzes/[quizId]/students/[studentId]`
-
-### `/dashboard/courses/[courseId]/quizzes/[quizId]/students/[studentId]`
-Purpose:
-- Show individual gaps, error types, and intervention suggestions.
-
-Primary actions:
-- `Mark Intervention Planned`
-- `Next At-Risk Student`
-- `Back to Class Insights`
-
-Next route:
-- Back -> `/dashboard/courses/[courseId]/quizzes/[quizId]/insights`
-- Next student -> `/dashboard/courses/[courseId]/quizzes/[quizId]/students/[studentId]`
+- Sync success -> `?view=analysis`
+- Analysis success -> `?view=insights`
+- Insights to students -> `?view=students`
+- Student list to detail -> `?view=students&studentId=...`
+- Student detail back -> `?view=insights` or `?view=students`
 
 ### `/dashboard/courses/[courseId]/history`
 Purpose:
@@ -180,7 +141,7 @@ Primary actions:
 - `Compare Trends`
 
 Next route:
-- Student drill-down -> `/dashboard/courses/[courseId]/quizzes/[quizId]/students/[studentId]`
+- Student drill-down -> `/dashboard/courses/[courseId]/quizzes/[quizId]?view=students&studentId=...`
 
 ### `/settings`
 Purpose:
@@ -207,15 +168,15 @@ Primary actions:
 3. `/onboarding/integrations` -> access validated.
 4. `/dashboard/courses` -> course selected.
 5. `/dashboard/courses/[courseId]/quizzes` -> quiz selected.
-6. `/dashboard/courses/[courseId]/quizzes/[quizId]/sync` -> data synchronized.
-7. `/dashboard/courses/[courseId]/quizzes/[quizId]/analysis` -> Gemini analysis completed.
-8. `/dashboard/courses/[courseId]/quizzes/[quizId]/insights` -> class risks and concepts reviewed.
-9. `/dashboard/courses/[courseId]/quizzes/[quizId]/students/[studentId]` -> targeted interventions planned.
+6. `/dashboard/courses/[courseId]/quizzes/[quizId]?view=sync` -> data synchronized.
+7. `/dashboard/courses/[courseId]/quizzes/[quizId]?view=analysis` -> Gemini analysis completed.
+8. `/dashboard/courses/[courseId]/quizzes/[quizId]?view=insights` -> class risks and concepts reviewed.
+9. `/dashboard/courses/[courseId]/quizzes/[quizId]?view=students&studentId=...` -> targeted interventions planned.
 10. `/dashboard/courses/[courseId]/history` -> follow-up trend review.
 
 ## 5) Navigation Rules for UX Consistency
 - Keep a persistent dashboard sidebar for all `/dashboard/*` pages.
-- Preserve selected `courseId` and `quizId` context across sync, analysis, insights, and student pages.
-- Use breadcrumbs: `Dashboard > Courses > [Course] > [Quiz] > [Page]`.
+- Preserve selected `courseId` and `quizId` context across workspace view changes.
+- Use breadcrumbs: `Dashboard > Courses > [Course] > Quizzes > [Quiz] > [View]`.
 - Show global status badges: `Not Synced`, `Synced`, `Analyzed`, `Error`.
 - Every critical step must expose both `Retry` and `Back` actions.

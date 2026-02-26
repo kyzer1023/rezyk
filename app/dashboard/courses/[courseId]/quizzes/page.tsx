@@ -103,13 +103,13 @@ export default function QuizzesPage({ params }: { params: Promise<{ courseId: st
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 {quiz.analysisStatus === "completed" ? (
-                  <Link href={routes.insights(courseId, quiz.id)}>
+                  <Link href={routes.quizWorkspace(courseId, quiz.id, { view: "insights" })}>
                     <button className="edu-btn" style={{ padding: "6px 16px", fontSize: 13 }}>
                       View Insights
                     </button>
                   </Link>
                 ) : (
-                  <Link href={routes.sync(courseId, quiz.id)}>
+                  <Link href={routes.quizWorkspace(courseId, quiz.id, { view: "sync" })}>
                     <button className="edu-btn" style={{ padding: "6px 16px", fontSize: 13 }}>
                       Start Workflow
                     </button>

@@ -146,7 +146,7 @@ export default function HistoryPage({ params }: { params: Promise<{ courseId: st
                   Top gaps: {snap.topWeakConcepts.join(", ") || "None"}
                 </p>
               </div>
-              <Link href={routes.insights(courseId, snap.quizId)}>
+              <Link href={routes.quizWorkspace(courseId, snap.quizId, { view: "insights" })}>
                 <button className="edu-btn-outline" style={{ padding: "4px 12px", fontSize: 12 }}>
                   View
                 </button>
