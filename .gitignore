@@ -45,3 +45,7 @@ next-env.d.ts
 
 # quiz analysis script artifacts
 tools/quiz-analysis/outputs/*.json
+video/node_modules/
+video/out/
+video/node_modules/
+video/out/
