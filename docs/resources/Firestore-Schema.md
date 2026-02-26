@@ -97,8 +97,82 @@ Stores Gemini analysis results.
   courseId: string
   modelOutput: ModelOutput         // from quiz-analysis-schema.ts
   derivedAnalysis: DerivedAnalysis // computed metrics
+  analysisInput: QuizAnalysisInput // original input sent to Gemini
+  emailMapping: Record<string, string> // studentId -> email
   createdAt: number
   modelId: string
+  ownerId: string
+}
+```
+
+### `studentNotes/{courseId_quizId_studentId}`
+Stores AI-generated student asset notes.
+
+```
+{
+  courseId: string
+  quizId: string
+  studentId: string
+  generatedAt: number
+  modelId: string
+  sourceAnalysisId: string
+  status: "success" | "error"
+  note?: {
+    studentDisplayName: string
+    topWeaknesses: [{
+      concept: string
+      errorType: "conceptual" | "procedural" | "careless"
+      likelyRootIssue: string
+    }]
+    improvementTips: string[]       // 3-5 practical tips
+    suggestedFollowUp: string
+  }
+  error?: string
+}
+```
+
+### `courseAnalyses/{courseId}`
+Stores course-wide material analysis results.
+
+```
+{
+  courseId: string
+  analyzedQuizIds: string[]
+  generatedAt: number
+  modelId: string
+  status: "success" | "error" | "insufficient_data"
+  analysis?: CourseAnalysisOutput   // from course-analysis-schema.ts
+  error?: string
+  ownerId: string
+}
+```
+
+### `historyAnalyses/{courseId}`
+Stores longitudinal history analysis results.
+
+```
+{
+  courseId: string
+  analyzedQuizIds: string[]
+  generatedAt: number
+  modelId: string
+  status: "success" | "error" | "insufficient_data"
+  analysis?: {
+    overallTrend: "improving" | "stable" | "declining" | "insufficient_data"
+    confidence: "low" | "medium" | "high"
+    evidenceSummary: {
+      scoreTrajectory: string
+      riskTrajectory: string
+      recurringWeakConcepts: string[]
+    }
+    interventionImpactHypothesis: {
+      appearsToImprove: string[]
+      remainsUnresolved: string[]
+    }
+    nextCycleActions: string[]      // 3-5 actionable steps
+    contradictionFlag?: string
+  }
+  error?: string
   ownerId: string
 }
 ```

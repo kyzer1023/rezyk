@@ -926,6 +926,15 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
   const [emailMap, setEmailMap] = useState<Record<string, string>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [batchGenerating, setBatchGenerating] = useState(false);
+  const [batchFilter, setBatchFilter] = useState<string>("critical+high");
+  const [batchResult, setBatchResult] = useState<{
+    generated: number;
+    failed: number;
+    results: Array<{ studentId: string; status: string; error?: string }>;
+  } | null>(null);
+  const [batchError, setBatchError] = useState<string | null>(null);
+  const [showBatchDialog, setShowBatchDialog] = useState(false);
 
   const loadStudents = useCallback(async (mode: "initial" | "refresh" = "initial") => {
     if (mode === "refresh") {
@@ -1041,21 +1050,123 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
     );
   }
 
+  async function runBatchGenerate() {
+    setBatchGenerating(true);
+    setBatchResult(null);
+    setBatchError(null);
+    try {
+      const res = await fetch("/api/notes/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId, quizId, filter: batchFilter }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Batch generation failed");
+      setBatchResult({ generated: data.generated, failed: data.failed, results: data.results });
+    } catch (e) {
+      setBatchError(e instanceof Error ? e.message : "Batch generation failed");
+    }
+    setBatchGenerating(false);
+    setShowBatchDialog(false);
+  }
+
   return (
     <div>
       <div className="edu-fade-in" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h1 className="edu-heading" style={{ fontSize: 22, margin: 0 }}>Students</h1>
-        <button
-          className="edu-btn-outline"
-          style={{ fontSize: 13, padding: "8px 16px" }}
-          onClick={() => {
-            void loadStudents("refresh");
-          }}
-          disabled={refreshing}
-        >
-          {refreshing ? "Refreshing..." : "Refresh Students"}
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            className="edu-btn"
+            style={{ fontSize: 13, padding: "8px 16px" }}
+            onClick={() => setShowBatchDialog(true)}
+            disabled={batchGenerating}
+          >
+            {batchGenerating ? "Generating Notes..." : "Batch Generate Notes"}
+          </button>
+          <button
+            className="edu-btn-outline"
+            style={{ fontSize: 13, padding: "8px 16px" }}
+            onClick={() => {
+              void loadStudents("refresh");
+            }}
+            disabled={refreshing}
+          >
+            {refreshing ? "Refreshing..." : "Refresh Students"}
+          </button>
+        </div>
       </div>
+
+      {showBatchDialog && (
+        <div className="edu-card edu-fade-in" style={{ padding: 20, marginBottom: 16, background: "#FCF8F3" }}>
+          <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Batch Generate Asset Notes</p>
+          <p style={{ fontSize: 12, color: "#6D6154", marginBottom: 12 }}>
+            Select which students to generate notes for:
+          </p>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+            {[
+              { value: "critical+high", label: "Critical + High (recommended)" },
+              { value: "critical", label: "Critical only" },
+              { value: "high", label: "High only" },
+              { value: "medium", label: "Medium" },
+              { value: "low", label: "Low" },
+              { value: "all", label: "All students" },
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setBatchFilter(opt.value)}
+                style={{
+                  padding: "5px 12px", borderRadius: 16, fontSize: 11, fontWeight: 600,
+                  cursor: "pointer",
+                  border: batchFilter === opt.value ? "1.5px solid #6E4836" : "1.5px solid #E8DFD4",
+                  background: batchFilter === opt.value ? "#6E4836" : "#FFF",
+                  color: batchFilter === opt.value ? "#FFF" : "#6D6154",
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="edu-btn" style={{ fontSize: 12 }} onClick={runBatchGenerate} disabled={batchGenerating}>
+              {batchGenerating ? "Generating..." : "Generate"}
+            </button>
+            <button className="edu-btn-outline" style={{ fontSize: 12 }} onClick={() => setShowBatchDialog(false)}>
+              Cancel
+            </button>
+          </div>
+          <p style={{ fontSize: 11, color: "#8A7D6F", marginTop: 8, fontStyle: "italic" }}>
+            AI-generated drafts — review before sharing with students or parents
+          </p>
+        </div>
+      )}
+
+      {batchResult && (
+        <div className="edu-card edu-fade-in" style={{ padding: 16, marginBottom: 16, background: batchResult.failed > 0 ? "#FEF8E7" : "#E9F3E5" }}>
+          <p style={{ fontSize: 13, fontWeight: 600, color: batchResult.failed > 0 ? "#8B6914" : "#3D7A2E", marginBottom: 4 }}>
+            Batch Complete: {batchResult.generated} generated, {batchResult.failed} failed
+          </p>
+          {batchResult.failed > 0 && (
+            <div style={{ marginTop: 8 }}>
+              {batchResult.results.filter((r) => r.status === "error").map((r) => (
+                <p key={r.studentId} style={{ fontSize: 11, color: "#A63D2E", margin: "2px 0" }}>
+                  {r.studentId}: {r.error}
+                </p>
+              ))}
+            </div>
+          )}
+          <button
+            className="edu-btn-outline"
+            style={{ fontSize: 11, padding: "3px 10px", marginTop: 8 }}
+            onClick={() => setBatchResult(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {batchError && (
+        <p style={{ marginBottom: 12, fontSize: 12, color: "#A63D2E" }}>{batchError}</p>
+      )}
 
       {loadError && (
         <p style={{ marginBottom: 12, fontSize: 12, color: "#A25E1A" }}>
@@ -1160,6 +1271,111 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
   );
 }
 
+interface StudentNoteData {
+  studentDisplayName: string;
+  topWeaknesses: Array<{
+    concept: string;
+    errorType: string;
+    likelyRootIssue: string;
+  }>;
+  improvementTips: string[];
+  suggestedFollowUp: string;
+}
+
+function StudentNoteCard({
+  note,
+  onRegenerate,
+  regenerating,
+}: {
+  note: StudentNoteData;
+  onRegenerate: () => void;
+  regenerating: boolean;
+}) {
+  return (
+    <div className="edu-card edu-fade-in" style={{ padding: 24, marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h3 className="edu-heading" style={{ fontSize: 16, margin: 0, fontWeight: 700 }}>
+          Asset Note
+        </h3>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            className="edu-btn-outline"
+            style={{ fontSize: 11, padding: "4px 10px" }}
+            onClick={() => {
+              const text = [
+                `Student: ${note.studentDisplayName}`,
+                "",
+                "Weaknesses:",
+                ...note.topWeaknesses.map((w) => `- ${w.concept} (${w.errorType}): ${w.likelyRootIssue}`),
+                "",
+                "Improvement Tips:",
+                ...note.improvementTips.map((t, i) => `${i + 1}. ${t}`),
+                "",
+                `Follow-up: ${note.suggestedFollowUp}`,
+              ].join("\n");
+              navigator.clipboard.writeText(text).catch(() => {});
+            }}
+          >
+            Copy
+          </button>
+          <button
+            className="edu-btn-outline"
+            style={{ fontSize: 11, padding: "4px 10px" }}
+            onClick={() => window.print()}
+          >
+            Print
+          </button>
+          <button
+            className="edu-btn-outline"
+            style={{ fontSize: 11, padding: "4px 10px" }}
+            onClick={onRegenerate}
+            disabled={regenerating}
+          >
+            {regenerating ? "Regenerating..." : "Regenerate"}
+          </button>
+        </div>
+      </div>
+
+      <p style={{ fontSize: 12, color: "#8A7D6F", margin: "0 0 4px", fontStyle: "italic" }}>
+        AI-generated draft — review before sharing
+      </p>
+
+      <div style={{ marginBottom: 16 }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: "#6D6154", margin: "12px 0 8px" }}>Weaknesses</p>
+        {note.topWeaknesses.map((w, i) => (
+          <div key={i} style={{ padding: "8px 0", borderBottom: i < note.topWeaknesses.length - 1 ? "1px solid #F0ECE5" : "none" }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{w.concept}</span>
+              <span style={{
+                fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 4,
+                color: ERROR_TYPE_COLORS[w.errorType] ?? "#8A7D6F",
+                background: ERROR_TYPE_BG[w.errorType] ?? "#F5F0E9",
+              }}>
+                {w.errorType}
+              </span>
+            </div>
+            <p style={{ fontSize: 12, color: "#6D6154", margin: 0 }}>{w.likelyRootIssue}</p>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: "#6D6154", margin: "0 0 8px" }}>Improvement Tips</p>
+        <ol style={{ margin: 0, paddingLeft: 18 }}>
+          {note.improvementTips.map((tip, i) => (
+            <li key={i} style={{ fontSize: 12, color: "#3D3229", marginBottom: 6, lineHeight: 1.5 }}>{tip}</li>
+          ))}
+        </ol>
+      </div>
+
+      <div style={{ background: "#F8F5F0", borderRadius: 8, padding: 14 }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: "#6D6154", margin: "0 0 4px" }}>Suggested Follow-up</p>
+        <p style={{ fontSize: 12, color: "#3D3229", margin: 0, lineHeight: 1.5 }}>{note.suggestedFollowUp}</p>
+      </div>
+    </div>
+  );
+}
+
 export function QuizStudentDetailPanel({
   courseId,
   quizId,
@@ -1173,6 +1389,9 @@ export function QuizStudentDetailPanel({
   const [loading, setLoading] = useState(true);
   const [emailMap, setEmailMap] = useState<Record<string, string>>({});
   const [allStudents, setAllStudents] = useState<StudentAnalysis[]>([]);
+  const [generatingNote, setGeneratingNote] = useState(false);
+  const [noteData, setNoteData] = useState<StudentNoteData | null>(null);
+  const [noteError, setNoteError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quizId}`)
@@ -1193,6 +1412,35 @@ export function QuizStudentDetailPanel({
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [courseId, quizId, studentId]);
+
+  useEffect(() => {
+    fetch(`/api/notes/list?courseId=${courseId}&quizId=${quizId}&studentId=${studentId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const notes = d.notes ?? [];
+        const successNote = notes.find((n: { status: string; note?: StudentNoteData }) => n.status === "success" && n.note);
+        if (successNote?.note) setNoteData(successNote.note);
+      })
+      .catch(() => {});
+  }, [courseId, quizId, studentId]);
+
+  async function generateNote() {
+    setGeneratingNote(true);
+    setNoteError(null);
+    try {
+      const res = await fetch("/api/notes/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId, quizId, studentId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to generate note");
+      setNoteData(data.note);
+    } catch (e) {
+      setNoteError(e instanceof Error ? e.message : "Failed to generate note");
+    }
+    setGeneratingNote(false);
+  }
 
   if (loading) return <p className="edu-muted">Loading student details...</p>;
   if (!student) {
@@ -1324,7 +1572,7 @@ export function QuizStudentDetailPanel({
         ))}
       </div>
 
-      <div className="edu-card edu-fade-in edu-fd2" style={{ padding: 24, marginBottom: 20 }}>
+      <div className="edu-card edu-fade-in edu-fd2" style={{ padding: 24, marginBottom: 14 }}>
         <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14, fontWeight: 700 }}>
           Interventions
         </h3>
@@ -1361,7 +1609,31 @@ export function QuizStudentDetailPanel({
         ))}
       </div>
 
-      <div style={{ display: "flex", gap: 10 }}>
+      {noteData && (
+        <StudentNoteCard
+          note={noteData}
+          onRegenerate={generateNote}
+          regenerating={generatingNote}
+        />
+      )}
+
+      {!noteData && (
+        <div className="edu-fade-in edu-fd3" style={{ marginBottom: 14 }}>
+          <button
+            className="edu-btn"
+            onClick={generateNote}
+            disabled={generatingNote}
+            style={{ fontSize: 13 }}
+          >
+            {generatingNote ? "Generating Asset Note..." : "Generate Asset Note"}
+          </button>
+          {noteError && (
+            <p style={{ fontSize: 12, color: "#A63D2E", marginTop: 8 }}>{noteError}</p>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
         {nextStudent && nextStudent.studentId !== studentId && (
           <Link href={routes.quizWorkspace(courseId, quizId, { view: "students", studentId: nextStudent.studentId })}>
             <button className="edu-btn">Next At-Risk Student</button>
