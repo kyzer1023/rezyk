@@ -83,3 +83,48 @@
 - Gemini structured output requests can fail with `INVALID_ARGUMENT` when response schemas are too complex/deep; use flatter API-facing schemas and enforce strict validation locally.
 - Gemini free-tier request limits are model-specific; harness model override is useful for validation when a pinned model quota is exhausted.
 - Gemma models are available via API in this workspace, but strict JSON mode may be unavailable on some Gemma IDs; keep schema-locked app-layer inference on Gemini Flash-family models.
+
+## Cursor Cloud specific instructions
+
+### Services
+
+| Service | Command | Notes |
+|---|---|---|
+| Dev server | `bun run dev` | Next.js on port 3000. Dashboard pages now fetch from Firestore via API routes. |
+| Lint | `bun run lint` | ESLint 9 with `eslint-config-next` (core-web-vitals + typescript). |
+| Build | `bun run build` | `next build` using Turbopack. Completes in ~10s. |
+| Quiz harness | `bun run analysis:quiz-harness` | Standalone Gemini analysis script. Requires `GEMINI_API_KEY`. |
+| Structured smoke | `bun run analysis:structured-smoke` | Standalone structured output smoke test. |
+
+### Auth Architecture
+
+- **Server-side OAuth** via `lib/auth/google-oauth.ts`. No Firebase Auth client popup.
+- **Session**: AES-256-GCM encrypted HTTP-only cookie (`edu_session`).
+- **Token store**: Firestore `users/{googleId}` with auto-refresh via `lib/auth/token-store.ts`.
+- **OAuth type**: Google "installed app" credentials. Redirect URI is `http://localhost:3000/api/auth/callback`.
+- **Required env vars**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `SESSION_SECRET`.
+- Testing auth requires the OAuth consent flow (browser redirect). Use token injection for automated testing.
+
+### API Route Map
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/auth/login` | GET | Redirects to Google OAuth consent |
+| `/api/auth/callback` | GET | Exchanges code for tokens, creates session |
+| `/api/auth/logout` | POST | Destroys session |
+| `/api/auth/status` | GET | Returns auth + integration status |
+| `/api/sync/courses` | POST | Syncs Classroom courses to Firestore |
+| `/api/sync/quiz` | POST | Syncs quiz structure + responses to Firestore |
+| `/api/analyze/run` | POST | Runs Gemini analysis (single API call) |
+| `/api/dashboard/courses` | GET | Reads synced courses |
+| `/api/dashboard/quizzes` | GET | Reads synced quizzes |
+| `/api/dashboard/analysis` | GET | Reads stored analysis results |
+
+### Caveats
+
+- **`.env.local` is required** with `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `SESSION_SECRET`.
+- **Bun is installed to `~/.bun/bin/bun`.** The update script ensures it's on `$PATH`.
+- **Gemini API usage is scarce.** The `/api/analyze/run` endpoint makes exactly 1 Gemini call per quiz. Use `gemini-3-flash-preview` model.
+- **Google OAuth refresh tokens expire after 7 days** if the Google Cloud project's OAuth consent screen is in "Testing" mode. Publish the app to remove this limit.
+- **No automated test suite exists.** Validation is manual.
+- **No Docker, no CI configuration.**

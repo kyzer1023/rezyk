@@ -1,12 +1,27 @@
-import { adminAuth } from "@/lib/firebaseAdmin";
+import { getSession, type SessionPayload } from "@/lib/auth/session";
+import { getValidAccessToken } from "@/lib/auth/token-store";
 
 export const runtime = "nodejs";
 
-export async function requireAuth(req: Request) {
-  const authHeader = req.headers.get("authorization") || "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!idToken) throw new Error("MISSING_AUTH");
+export interface AuthContext {
+  session: SessionPayload;
+  googleAccessToken: string;
+}
 
-  const decoded = await adminAuth.verifyIdToken(idToken);
-  return decoded; // has uid, email, etc.
+export async function requireAuth(): Promise<AuthContext> {
+  const session = await getSession();
+  if (!session) {
+    throw new Error("MISSING_AUTH");
+  }
+
+  const googleAccessToken = await getValidAccessToken(session.sub);
+  return { session, googleAccessToken };
+}
+
+export async function requireSession(): Promise<SessionPayload> {
+  const session = await getSession();
+  if (!session) {
+    throw new Error("MISSING_AUTH");
+  }
+  return session;
 }

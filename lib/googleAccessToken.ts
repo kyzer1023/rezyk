@@ -1,37 +1,17 @@
-import { adminDb } from "@/lib/firebaseAdmin";
-import { requireAuth } from "@/lib/requireAuth";
-
-type StoredGoogleData = {
-  accessToken?: string;
-  exp?: number;
-};
+import { getSession } from "@/lib/auth/session";
+import { getValidAccessToken } from "@/lib/auth/token-store";
 
 export type GoogleAccessTokenResult = {
-  uid: string;
+  userId: string;
   googleAccessToken: string;
-  exp?: number;
 };
 
-export async function getGoogleAccessTokenFromRequest(
-  req: Request,
-): Promise<GoogleAccessTokenResult> {
-  const decoded = await requireAuth(req);
-  const uid = decoded.uid;
-
-  const userDoc = await adminDb.collection("users").doc(uid).get();
-  if (!userDoc.exists) {
-    throw new Error("USER_NOT_FOUND");
+export async function getGoogleAccessTokenFromRequest(): Promise<GoogleAccessTokenResult> {
+  const session = await getSession();
+  if (!session) {
+    throw new Error("MISSING_AUTH");
   }
 
-  const google = userDoc.data()?.google as StoredGoogleData | undefined;
-  const googleAccessToken = google?.accessToken;
-  if (!googleAccessToken) {
-    throw new Error("MISSING_GOOGLE_TOKEN");
-  }
-
-  return {
-    uid,
-    googleAccessToken,
-    exp: google?.exp,
-  };
+  const googleAccessToken = await getValidAccessToken(session.sub);
+  return { userId: session.sub, googleAccessToken };
 }
