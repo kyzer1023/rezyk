@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, use } from "react";
+import { useCallback, useEffect, useRef, useState, use } from "react";
 import Link from "next/link";
 import { routes } from "@/lib/routes";
 
@@ -24,12 +24,13 @@ export default function SyncPage({ params }: { params: Promise<{ courseId: strin
   const [syncing, setSyncing] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasAutoStarted = useRef(false);
 
-  function updateStep(id: string, update: Partial<SyncStep>) {
+  const updateStep = useCallback((id: string, update: Partial<SyncStep>) => {
     setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, ...update } : s)));
-  }
+  }, []);
 
-  async function startSync() {
+  const startSync = useCallback(async () => {
     setSyncing(true);
     setDone(false);
     setError(null);
@@ -77,7 +78,13 @@ export default function SyncPage({ params }: { params: Promise<{ courseId: strin
       );
     }
     setSyncing(false);
-  }
+  }, [courseId, updateStep]);
+
+  useEffect(() => {
+    if (hasAutoStarted.current) return;
+    hasAutoStarted.current = true;
+    void startSync();
+  }, [startSync]);
 
   return (
     <div>
@@ -85,7 +92,7 @@ export default function SyncPage({ params }: { params: Promise<{ courseId: strin
         Data Sync
       </h1>
       <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 20 }}>
-        Sync quiz data from Google Classroom and Forms
+        Sync quiz data from Google Classroom and Forms (starts automatically)
       </p>
 
       <div className="edu-card edu-fade-in edu-fd2" style={{ padding: 24, marginBottom: 20 }}>

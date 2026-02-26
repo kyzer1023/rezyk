@@ -4,6 +4,8 @@ import { refreshAccessToken, type TokenSet } from "./google-oauth";
 const USERS_COLLECTION = "users";
 const REFRESH_BUFFER_MS = 5 * 60 * 1000; // refresh 5 min before expiry
 
+export type BootstrapStatus = "pending" | "syncing" | "completed" | "error";
+
 export interface StoredUser {
   googleId: string;
   email: string;
@@ -16,6 +18,10 @@ export interface StoredUser {
     scope: string;
   };
   integrationStatus: "connected" | "needs_reconnect" | "not_connected";
+  hasInitialSync?: boolean;
+  bootstrapStatus?: BootstrapStatus;
+  lastAutoSyncAt?: number;
+  lastBootstrapError?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -28,6 +34,7 @@ export async function saveUserAndTokens(
   const now = Date.now();
   const ref = adminDb.collection(USERS_COLLECTION).doc(googleId);
   const existing = await ref.get();
+  const existingData = existing.exists ? (existing.data() as Partial<StoredUser>) : null;
 
   const data: Partial<StoredUser> = {
     googleId,
@@ -46,9 +53,49 @@ export async function saveUserAndTokens(
 
   if (!existing.exists) {
     data.createdAt = now;
+    data.hasInitialSync = false;
+    data.bootstrapStatus = "pending";
+    data.lastAutoSyncAt = 0;
+    data.lastBootstrapError = "";
+  } else {
+    data.hasInitialSync = existingData?.hasInitialSync ?? false;
+    data.bootstrapStatus = existingData?.bootstrapStatus ?? "pending";
+    data.lastAutoSyncAt = existingData?.lastAutoSyncAt ?? 0;
+    data.lastBootstrapError = existingData?.lastBootstrapError ?? "";
   }
 
   await ref.set(data, { merge: true });
+}
+
+export interface BootstrapStateUpdate {
+  bootstrapStatus?: BootstrapStatus;
+  hasInitialSync?: boolean;
+  lastAutoSyncAt?: number;
+  lastBootstrapError?: string | null;
+}
+
+export async function updateBootstrapState(
+  googleId: string,
+  update: BootstrapStateUpdate,
+): Promise<void> {
+  const payload: Record<string, unknown> = {
+    updatedAt: Date.now(),
+  };
+
+  if (update.bootstrapStatus) {
+    payload.bootstrapStatus = update.bootstrapStatus;
+  }
+  if (typeof update.hasInitialSync === "boolean") {
+    payload.hasInitialSync = update.hasInitialSync;
+  }
+  if (typeof update.lastAutoSyncAt === "number") {
+    payload.lastAutoSyncAt = update.lastAutoSyncAt;
+  }
+  if (update.lastBootstrapError !== undefined) {
+    payload.lastBootstrapError = update.lastBootstrapError ?? "";
+  }
+
+  await adminDb.collection(USERS_COLLECTION).doc(googleId).set(payload, { merge: true });
 }
 
 export async function getValidAccessToken(googleId: string): Promise<string> {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
 import { routes } from "@/lib/routes";
 
@@ -26,19 +26,54 @@ export default function StudentsPage({ params }: { params: Promise<{ courseId: s
   const [search, setSearch] = useState("");
   const [riskFilter, setRiskFilter] = useState("all");
   const [emailMap, setEmailMap] = useState<Record<string, string>>({});
+  const [runningAnalysis, setRunningAnalysis] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const loadStudents = useCallback(async () => {
+    const res = await fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quizId}`, {
+      cache: "no-store",
+    });
+    const data = (await res.json()) as {
+      found?: boolean;
+      modelOutput?: { students?: StudentAnalysis[] };
+      emailMapping?: Record<string, string>;
+    };
+    if (data.found) {
+      setStudents(data.modelOutput?.students ?? []);
+      setEmailMap(data.emailMapping ?? {});
+    } else {
+      setStudents([]);
+      setEmailMap({});
+    }
+  }, [courseId, quizId]);
 
   useEffect(() => {
-    fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quizId}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.found) {
-          setStudents(data.modelOutput?.students ?? []);
-          setEmailMap(data.emailMapping ?? {});
-        }
-      })
+    loadStudents()
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [courseId, quizId]);
+  }, [loadStudents]);
+
+  async function runAnalysisInPlace() {
+    setRunningAnalysis(true);
+    setActionError(null);
+    try {
+      const res = await fetch("/api/analyze/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId, quizId }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setActionError(payload.error ?? "Failed to run analysis.");
+        return;
+      }
+      await loadStudents();
+    } catch {
+      setActionError("Failed to run analysis.");
+    } finally {
+      setRunningAnalysis(false);
+    }
+  }
 
   const filtered = students
     .filter((s) => riskFilter === "all" || s.riskLevel === riskFilter)
@@ -51,16 +86,28 @@ export default function StudentsPage({ params }: { params: Promise<{ courseId: s
   const riskOrder = ["critical", "high", "medium", "low"];
   const sorted = [...filtered].sort((a, b) => riskOrder.indexOf(a.riskLevel) - riskOrder.indexOf(b.riskLevel));
 
-  if (loading) return <p className="edu-muted">Loading students…</p>;
+  if (loading) return <p className="edu-muted">Loading students...</p>;
 
   if (students.length === 0) {
     return (
       <div>
         <h1 className="edu-heading" style={{ fontSize: 22, marginBottom: 12 }}>Students</h1>
-        <p className="edu-muted">No analysis results. Run analysis first.</p>
-        <Link href={routes.analysis(courseId, quizId)}>
-          <button className="edu-btn" style={{ marginTop: 12 }}>Run Analysis</button>
-        </Link>
+        <p className="edu-muted" style={{ marginBottom: 12 }}>
+          {runningAnalysis
+            ? "Running analysis now..."
+            : "No analysis results. Run analysis to unlock student-level insights."}
+        </p>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button className="edu-btn" onClick={runAnalysisInPlace} disabled={runningAnalysis}>
+            {runningAnalysis ? "Running..." : "Run Analysis Now"}
+          </button>
+          <Link href={routes.analysis(courseId, quizId)}>
+            <button className="edu-btn-outline">Open Analysis Page</button>
+          </Link>
+        </div>
+        {actionError && (
+          <p style={{ color: "#A63D2E", fontSize: 12, marginTop: 10 }}>{actionError}</p>
+        )}
       </div>
     );
   }

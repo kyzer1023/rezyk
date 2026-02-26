@@ -8,16 +8,36 @@ export default function LandingPage() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    fetch("/api/auth/status")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.authenticated) {
+    async function checkSession() {
+      try {
+        const authRes = await fetch("/api/auth/status", { cache: "no-store" });
+        const authData = (await authRes.json()) as { authenticated: boolean };
+        if (!authData.authenticated) {
+          setChecking(false);
+          return;
+        }
+
+        const bootstrapRes = await fetch("/api/bootstrap/status", {
+          cache: "no-store",
+        });
+        if (!bootstrapRes.ok) {
+          router.replace("/dashboard");
+          return;
+        }
+        const bootstrapData = (await bootstrapRes.json()) as {
+          hasInitialSync: boolean;
+        };
+        if (bootstrapData.hasInitialSync) {
           router.replace("/dashboard");
         } else {
-          setChecking(false);
+          router.replace("/onboarding/integrations");
         }
-      })
-      .catch(() => setChecking(false));
+      } catch {
+        setChecking(false);
+      }
+    }
+
+    void checkSession();
   }, [router]);
 
   if (checking) {

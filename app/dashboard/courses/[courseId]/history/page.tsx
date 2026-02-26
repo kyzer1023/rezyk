@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
 import { routes } from "@/lib/routes";
 import TrendChart from "@/lib/charts/TrendChart";
@@ -18,42 +18,80 @@ export default function HistoryPage({ params }: { params: Promise<{ courseId: st
   const { courseId } = use(params);
   const [snapshots, setSnapshots] = useState<QuizAnalysis[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchHistorySnapshots = useCallback(async (): Promise<QuizAnalysis[]> => {
+    const qRes = await fetch(`/api/dashboard/quizzes?courseId=${courseId}`, {
+      cache: "no-store",
+    });
+    const qData = (await qRes.json()) as {
+      quizzes?: Array<{ id: string; title: string; analysisStatus: string }>;
+    };
+    const quizzes = qData.quizzes ?? [];
+
+    const analyses: QuizAnalysis[] = [];
+    for (const quiz of quizzes) {
+      if (quiz.analysisStatus !== "completed") continue;
+      const aRes = await fetch(
+        `/api/dashboard/analysis?courseId=${courseId}&quizId=${quiz.id}`,
+        { cache: "no-store" },
+      );
+      const aData = (await aRes.json()) as {
+        found?: boolean;
+        createdAt?: number;
+        derivedAnalysis?: {
+          scoreMetrics?: { averageScore?: number };
+          riskDistribution?: { riskLevel: string; count: number; percentage: number }[];
+          conceptHeatmap?: Array<{ concept: string }>;
+        };
+      };
+      if (!aData.found) continue;
+      analyses.push({
+        quizId: quiz.id,
+        title: quiz.title,
+        createdAt: aData.createdAt ?? Date.now(),
+        averageScore: aData.derivedAnalysis?.scoreMetrics?.averageScore ?? 0,
+        riskDistribution: aData.derivedAnalysis?.riskDistribution ?? [],
+        topWeakConcepts: (aData.derivedAnalysis?.conceptHeatmap ?? [])
+          .slice(0, 3)
+          .map((c) => c.concept),
+      });
+    }
+
+    return analyses;
+  }, [courseId]);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        const qRes = await fetch(`/api/dashboard/quizzes?courseId=${courseId}`);
-        const qData = await qRes.json();
-        const quizzes = qData.quizzes ?? [];
-
-        const analyses: QuizAnalysis[] = [];
-        for (const quiz of quizzes) {
-          if (quiz.analysisStatus !== "completed") continue;
-          const aRes = await fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quiz.id}`);
-          const aData = await aRes.json();
-          if (!aData.found) continue;
-          analyses.push({
-            quizId: quiz.id,
-            title: quiz.title,
-            createdAt: aData.createdAt,
-            averageScore: aData.derivedAnalysis?.scoreMetrics?.averageScore ?? 0,
-            riskDistribution: aData.derivedAnalysis?.riskDistribution ?? [],
-            topWeakConcepts: (aData.derivedAnalysis?.conceptHeatmap ?? [])
-              .slice(0, 3)
-              .map((c: { concept: string }) => c.concept),
-          });
+        const analyses = await fetchHistorySnapshots();
+        if (!cancelled) {
+          setSnapshots(analyses);
         }
-
-        if (!cancelled) setSnapshots(analyses);
       } catch {
         // silent
       }
-      if (!cancelled) setLoading(false);
+      if (!cancelled) {
+        setLoading(false);
+      }
     }
-    load();
-    return () => { cancelled = true; };
-  }, [courseId]);
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchHistorySnapshots]);
+
+  async function refreshHistory() {
+    setRefreshing(true);
+    try {
+      const analyses = await fetchHistorySnapshots();
+      setSnapshots(analyses);
+    } catch {
+      // silent
+    }
+    setRefreshing(false);
+  }
 
   const trendData = snapshots.map((s) => ({
     quizId: s.quizId,
@@ -68,13 +106,23 @@ export default function HistoryPage({ params }: { params: Promise<{ courseId: st
     topWeakConcepts: s.topWeakConcepts,
   }));
 
-  if (loading) return <p className="edu-muted">Loading history…</p>;
+  if (loading) return <p className="edu-muted">Loading history...</p>;
 
   return (
     <div>
-      <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 4 }}>
-        Quiz History
-      </h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+        <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 0 }}>
+          Quiz History
+        </h1>
+        <button
+          className="edu-btn-outline"
+          style={{ fontSize: 12, padding: "6px 14px" }}
+          onClick={refreshHistory}
+          disabled={refreshing}
+        >
+          {refreshing ? "Refreshing..." : "Refresh History"}
+        </button>
+      </div>
       <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 20 }}>
         {snapshots.length} analyzed quiz(es) for this course
       </p>
@@ -108,7 +156,12 @@ export default function HistoryPage({ params }: { params: Promise<{ courseId: st
         ))}
         {snapshots.length === 0 && (
           <div className="edu-card" style={{ padding: 32, textAlign: "center" }}>
-            <p className="edu-muted">No analyzed quizzes yet. Run analysis on a quiz first.</p>
+            <p className="edu-muted" style={{ marginBottom: 12 }}>
+              No analyzed quizzes yet. Analyze a quiz to populate history trends.
+            </p>
+            <Link href={routes.quizzes(courseId)}>
+              <button className="edu-btn">Open Quiz List</button>
+            </Link>
           </div>
         )}
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { routes } from "@/lib/routes";
 
 interface Course {
@@ -21,56 +21,75 @@ interface Quiz {
   totalStudents: number;
 }
 
+interface BootstrapStatusResponse {
+  hasInitialSync: boolean;
+  bootstrapStatus: "pending" | "syncing" | "completed" | "error";
+  lastAutoSyncAt: number;
+  lastBootstrapError: string;
+}
+
 export default function DashboardPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [bootstrap, setBootstrap] = useState<BootstrapStatusResponse | null>(null);
+
+  const loadDashboardData = useCallback(async () => {
+    const [cRes, qRes] = await Promise.all([
+      fetch("/api/dashboard/courses", { cache: "no-store" }),
+      fetch("/api/dashboard/quizzes", { cache: "no-store" }),
+    ]);
+    const cData = (await cRes.json()) as { courses?: Course[] };
+    const qData = (await qRes.json()) as { quizzes?: Quiz[] };
+    setCourses(cData.courses ?? []);
+    setQuizzes(qData.quizzes ?? []);
+  }, []);
+
+  const loadBootstrapStatus = useCallback(async () => {
+    const res = await fetch("/api/bootstrap/status", { cache: "no-store" });
+    if (!res.ok) return;
+    const data = (await res.json()) as BootstrapStatusResponse;
+    setBootstrap(data);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        const [cRes, qRes] = await Promise.all([
-          fetch("/api/dashboard/courses"),
-          fetch("/api/dashboard/quizzes"),
-        ]);
-        const cData = await cRes.json();
-        const qData = await qRes.json();
-        if (!cancelled) {
-          setCourses(cData.courses ?? []);
-          setQuizzes(qData.quizzes ?? []);
-        }
+        await Promise.all([loadDashboardData(), loadBootstrapStatus()]);
       } catch {
         // silent
       }
-      if (!cancelled) setLoaded(true);
+      if (!cancelled) {
+        setLoaded(true);
+      }
     }
-    load();
-    return () => { cancelled = true; };
-  }, []);
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadBootstrapStatus, loadDashboardData]);
+
+  useEffect(() => {
+    if (bootstrap?.bootstrapStatus !== "syncing") return;
+    const interval = window.setInterval(() => {
+      void Promise.all([loadDashboardData(), loadBootstrapStatus()]);
+    }, 2500);
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [bootstrap, loadBootstrapStatus, loadDashboardData]);
 
   async function syncCourses() {
     setSyncing(true);
     try {
-      const syncRes = await fetch("/api/sync/courses", { method: "POST" });
-      const syncData = await syncRes.json();
-      const syncedCourses = syncData.courses ?? [];
-      for (const c of syncedCourses) {
-        await fetch("/api/sync/quiz", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ courseId: c.courseId }),
-        });
-      }
-      const [cRes, qRes] = await Promise.all([
-        fetch("/api/dashboard/courses"),
-        fetch("/api/dashboard/quizzes"),
-      ]);
-      const cData = await cRes.json();
-      const qData = await qRes.json();
-      setCourses(cData.courses ?? []);
-      setQuizzes(qData.quizzes ?? []);
+      await fetch("/api/bootstrap/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "refresh", analyzeLimit: 0 }),
+      });
+      await Promise.all([loadDashboardData(), loadBootstrapStatus()]);
     } catch {
       // silent
     }
@@ -94,15 +113,19 @@ export default function DashboardPage() {
           onClick={syncCourses}
           disabled={syncing}
         >
-          {syncing ? "Syncing…" : "Sync All"}
+          {syncing ? "Refreshing..." : "Refresh Data"}
         </button>
       </div>
       <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 28 }}>
         {loaded
           ? courses.length > 0
             ? "Your classroom overview at a glance."
-            : "No courses synced yet. Click \"Sync All\" to import from Google Classroom."
-          : "Loading…"}
+            : bootstrap?.bootstrapStatus === "syncing" || syncing
+              ? "Preparing your classroom data in the background..."
+              : bootstrap?.bootstrapStatus === "error"
+                ? "Data sync needs attention. Retry refresh to continue."
+                : "Setting up your classroom data..."
+          : "Loading..."}
       </p>
 
       <div
@@ -151,7 +174,23 @@ export default function DashboardPage() {
             Quizzes
           </h3>
           {quizzes.length === 0 ? (
-            <p className="edu-muted" style={{ fontSize: 13 }}>No quizzes synced yet.</p>
+            <div>
+              <p className="edu-muted" style={{ fontSize: 13, marginBottom: 12 }}>
+                {bootstrap?.bootstrapStatus === "syncing" || syncing
+                  ? "Quiz data is being prepared."
+                  : "No quizzes synced yet."}
+              </p>
+              {bootstrap?.bootstrapStatus !== "syncing" && (
+                <button
+                  className="edu-btn-outline"
+                  style={{ fontSize: 12 }}
+                  onClick={syncCourses}
+                  disabled={syncing}
+                >
+                  {syncing ? "Refreshing..." : "Retry Sync"}
+                </button>
+              )}
+            </div>
           ) : (
             quizzes.slice(0, 3).map((quiz) => (
               <div

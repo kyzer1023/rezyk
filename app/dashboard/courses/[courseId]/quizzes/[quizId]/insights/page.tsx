@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
 import { routes } from "@/lib/routes";
 import RiskDistribution from "@/lib/charts/RiskDistribution";
@@ -27,29 +27,73 @@ export default function InsightsPage({ params }: { params: Promise<{ courseId: s
   const { courseId, quizId } = use(params);
   const [data, setData] = useState<AnalysisData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [runningAnalysis, setRunningAnalysis] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quizId}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.found) setData(d);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const loadAnalysis = useCallback(async () => {
+    const res = await fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quizId}`, {
+      cache: "no-store",
+    });
+    const payload = (await res.json()) as AnalysisData & { found?: boolean };
+    if (payload.found) {
+      setData(payload);
+    } else {
+      setData(null);
+    }
   }, [courseId, quizId]);
 
+  useEffect(() => {
+    loadAnalysis()
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [loadAnalysis]);
+
+  async function runAnalysisInPlace() {
+    setRunningAnalysis(true);
+    setActionError(null);
+    try {
+      const res = await fetch("/api/analyze/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId, quizId }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setActionError(payload.error ?? "Failed to run analysis.");
+        return;
+      }
+      await loadAnalysis();
+    } catch {
+      setActionError("Failed to run analysis.");
+    } finally {
+      setRunningAnalysis(false);
+    }
+  }
+
   if (loading) {
-    return <p className="edu-muted">Loading insights…</p>;
+    return <p className="edu-muted">Loading insights...</p>;
   }
 
   if (!data) {
     return (
       <div>
         <h1 className="edu-heading" style={{ fontSize: 22, marginBottom: 12 }}>Class Insights</h1>
-        <p className="edu-muted" style={{ marginBottom: 20 }}>No analysis found. Run an analysis first.</p>
-        <Link href={routes.analysis(courseId, quizId)}>
-          <button className="edu-btn">Run Analysis</button>
-        </Link>
+        <p className="edu-muted" style={{ marginBottom: 12 }}>
+          {runningAnalysis
+            ? "Running analysis now..."
+            : "No analysis found. Run analysis to generate class insights."}
+        </p>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button className="edu-btn" onClick={runAnalysisInPlace} disabled={runningAnalysis}>
+            {runningAnalysis ? "Running..." : "Run Analysis Now"}
+          </button>
+          <Link href={routes.analysis(courseId, quizId)}>
+            <button className="edu-btn-outline">Open Analysis Page</button>
+          </Link>
+        </div>
+        {actionError && (
+          <p style={{ color: "#A63D2E", fontSize: 12, marginTop: 10 }}>{actionError}</p>
+        )}
       </div>
     );
   }

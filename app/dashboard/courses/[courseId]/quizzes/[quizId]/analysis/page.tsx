@@ -54,6 +54,7 @@ export default function AnalysisPage({ params }: { params: Promise<{ courseId: s
   const [running, setRunning] = useState(false);
   const [complete, setComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showingPreviousResult, setShowingPreviousResult] = useState(false);
   const [summary, setSummary] = useState<{
     studentsAnalyzed: number;
     riskDistribution: { riskLevel: string; count: number; percentage: number }[];
@@ -67,6 +68,7 @@ export default function AnalysisPage({ params }: { params: Promise<{ courseId: s
       .then((data) => {
         if (data.found) {
           setComplete(true);
+          setShowingPreviousResult(false);
           setSummary({
             studentsAnalyzed: data.modelOutput?.students?.length ?? 0,
             riskDistribution: data.derivedAnalysis?.riskDistribution ?? [],
@@ -78,8 +80,10 @@ export default function AnalysisPage({ params }: { params: Promise<{ courseId: s
   }, [courseId, quizId]);
 
   async function runAnalysis() {
+    const hasPreviousCompletedResult = complete && summary !== null;
     setRunning(true);
     setError(null);
+    setShowingPreviousResult(false);
     setStatusText("Preparing quiz data for Gemini…");
 
     try {
@@ -100,9 +104,11 @@ export default function AnalysisPage({ params }: { params: Promise<{ courseId: s
 
       setSummary(data.summary);
       setComplete(true);
+      setShowingPreviousResult(false);
       setStatusText("Analysis complete");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Analysis failed";
+      setShowingPreviousResult(hasPreviousCompletedResult);
       setError(msg);
       setStatusText("Analysis failed");
     }
@@ -176,11 +182,27 @@ export default function AnalysisPage({ params }: { params: Promise<{ courseId: s
           </>
         )}
 
-        {complete && summary && (
+        {!running && complete && summary && (
           <>
-            <p style={{ fontSize: 15, color: "#3D7A2E", fontWeight: 600, marginBottom: 16 }}>
-              ✓ Analysis complete — {summary.studentsAnalyzed} student(s) analyzed
-            </p>
+            {showingPreviousResult ? (
+              <>
+                <p style={{ fontSize: 15, color: "#A63D2E", fontWeight: 600, marginBottom: 6 }}>
+                  Analysis failed — showing previous completed analysis
+                </p>
+                {error && (
+                  <p className="edu-muted" style={{ fontSize: 12, marginBottom: 12 }}>
+                    {error}
+                  </p>
+                )}
+                <p style={{ fontSize: 14, color: "#6B7280", fontWeight: 600, marginBottom: 16 }}>
+                  Previous analysis — {summary.studentsAnalyzed} student(s) analyzed
+                </p>
+              </>
+            ) : (
+              <p style={{ fontSize: 15, color: "#3D7A2E", fontWeight: 600, marginBottom: 16 }}>
+                ✓ Analysis complete — {summary.studentsAnalyzed} student(s) analyzed
+              </p>
+            )}
             <div
               style={{
                 display: "grid",
@@ -205,18 +227,18 @@ export default function AnalysisPage({ params }: { params: Promise<{ courseId: s
           </>
         )}
 
-        {error && (
+        {error && !showingPreviousResult && (
           <p style={{ color: "#A63D2E", fontSize: 13, marginTop: 10 }}>{error}</p>
         )}
       </div>
 
       <div style={{ display: "flex", gap: 10 }}>
-        {!complete && (
+        {!running && !complete && (
           <button className="edu-btn" onClick={runAnalysis} disabled={running}>
             {running ? "Running…" : "Run Analysis"}
           </button>
         )}
-        {complete && (
+        {!running && complete && (
           <>
             <Link href={routes.insights(courseId, quizId)}>
               <button className="edu-btn">Open Insights</button>

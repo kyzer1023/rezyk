@@ -18,22 +18,72 @@ export default function QuizzesPage({ params }: { params: Promise<{ courseId: st
   const { courseId } = use(params);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/dashboard/quizzes?courseId=${courseId}`)
-      .then((r) => r.json())
-      .then((data) => setQuizzes(data.quizzes ?? []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    async function load() {
+      try {
+        const res = await fetch(`/api/dashboard/quizzes?courseId=${courseId}`, {
+          cache: "no-store",
+        });
+        const data = (await res.json()) as { quizzes?: Quiz[] };
+        if (!cancelled) {
+          setQuizzes(data.quizzes ?? []);
+        }
+      } catch {
+        // silent
+      }
+      if (!cancelled) {
+        setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
   }, [courseId]);
+
+  async function syncQuizzes() {
+    setSyncing(true);
+    try {
+      await fetch("/api/sync/quiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId }),
+      });
+      const res = await fetch(`/api/dashboard/quizzes?courseId=${courseId}`, {
+        cache: "no-store",
+      });
+      const data = (await res.json()) as { quizzes?: Quiz[] };
+      setQuizzes(data.quizzes ?? []);
+    } catch {
+      // silent
+    }
+    setSyncing(false);
+  }
 
   return (
     <div>
-      <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 4 }}>
-        Quiz Assignments
-      </h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+        <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 0 }}>
+          Quiz Assignments
+        </h1>
+        <button
+          className="edu-btn-outline"
+          style={{ fontSize: 12, padding: "6px 14px" }}
+          onClick={syncQuizzes}
+          disabled={syncing}
+        >
+          {syncing ? "Syncing..." : "Refresh Quizzes"}
+        </button>
+      </div>
       <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 20 }}>
-        {loading ? "Loading…" : `${quizzes.length} quiz(es) with linked Google Forms`}
+        {loading
+          ? "Loading..."
+          : syncing
+            ? "Preparing quizzes from Google Classroom..."
+            : `${quizzes.length} quiz(es) with linked Google Forms`}
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -71,7 +121,14 @@ export default function QuizzesPage({ params }: { params: Promise<{ courseId: st
         ))}
         {!loading && quizzes.length === 0 && (
           <div className="edu-card" style={{ padding: 32, textAlign: "center" }}>
-            <p className="edu-muted">No quiz assignments found for this course.</p>
+            <p className="edu-muted" style={{ marginBottom: 12 }}>
+              {syncing
+                ? "Syncing quizzes..."
+                : "No quiz assignments found for this course."}
+            </p>
+            <button className="edu-btn" onClick={syncQuizzes} disabled={syncing}>
+              {syncing ? "Syncing..." : "Sync Quizzes"}
+            </button>
           </div>
         )}
       </div>

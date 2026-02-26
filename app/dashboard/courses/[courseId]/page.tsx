@@ -104,7 +104,16 @@ export default function CourseDetailPage({ params }: { params: Promise<{ courseI
           Quizzes
         </h3>
         {quizzes.length === 0 ? (
-          <p className="edu-muted" style={{ fontSize: 13 }}>No quizzes found. Sync to import from Google Classroom.</p>
+          <div>
+            <p className="edu-muted" style={{ fontSize: 13, marginBottom: 12 }}>
+              {syncing
+                ? "Preparing quizzes from Google Classroom..."
+                : "No quizzes found. Sync to import from Google Classroom."}
+            </p>
+            <button className="edu-btn-outline" onClick={syncQuizzes} disabled={syncing}>
+              {syncing ? "Syncing..." : "Sync Quizzes"}
+            </button>
+          </div>
         ) : (
           quizzes.map((quiz) => (
             <div

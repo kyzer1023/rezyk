@@ -184,7 +184,6 @@ export async function POST(req: Request) {
         responseCount,
         totalStudents: studentCount,
         syncStatus: "synced",
-        analysisStatus: "not_started",
         lastSynced: now,
         ownerId: session.sub,
       }, { merge: true });
