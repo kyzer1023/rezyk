@@ -128,3 +128,5 @@
 - **Google OAuth refresh tokens expire after 7 days** if the Google Cloud project's OAuth consent screen is in "Testing" mode. Publish the app to remove this limit.
 - **No automated test suite exists.** Validation is manual.
 - **No Docker, no CI configuration.**
+- **Next.js dev lock file**: If the dev server doesn't shut down cleanly, remove `.next/dev/lock` before restarting or the new process will fail with "Unable to acquire lock".
+- **`.env.local` also requires Firebase vars** (`FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, `NEXT_PUBLIC_FIREBASE_*`) for Firestore and the full env var list in `README.md § Local Setup`.
