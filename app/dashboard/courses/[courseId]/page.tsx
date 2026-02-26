@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, use } from "react";
 import { routes } from "@/lib/routes";
+import CourseMaterialPanel from "@/components/analysis/CourseMaterialPanel";
 
 interface Course {
   id: string;
@@ -135,6 +136,8 @@ export default function CourseDetailPage({ params }: { params: Promise<{ courseI
           ))
         )}
       </div>
+
+      <CourseMaterialPanel courseId={courseId} />
     </div>
   );
 }

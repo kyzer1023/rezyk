@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, useCallback, use } from "react";
 import Link from "next/link";
 import { routes } from "@/lib/routes";
+import StudentNoteCard from "@/components/notes/StudentNoteCard";
 
 interface Misconception {
   concept: string;
@@ -23,6 +24,21 @@ interface StudentAnalysis {
   misconceptions: Misconception[];
   interventions: Intervention[];
   rationale: string;
+}
+
+interface SavedNoteData {
+  noteId: string;
+  displayName: string;
+  note: {
+    studentId: string;
+    displayName: string;
+    topWeaknesses: { concept: string; errorType: string; rootIssue: string }[];
+    improvementTips: string[];
+    teacherFollowUp: string;
+  };
+  generatedAt: number;
+  status: string;
+  error?: string;
 }
 
 const RISK_COLORS: Record<string, { bg: string; color: string }> = {
@@ -48,6 +64,9 @@ export default function StudentDetailPage({
   const [loading, setLoading] = useState(true);
   const [emailMap, setEmailMap] = useState<Record<string, string>>({});
   const [allStudents, setAllStudents] = useState<StudentAnalysis[]>([]);
+  const [savedNote, setSavedNote] = useState<SavedNoteData | null>(null);
+  const [noteLoading, setNoteLoading] = useState(true);
+  const [noteGenerating, setNoteGenerating] = useState(false);
 
   useEffect(() => {
     fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quizId}`)
@@ -63,6 +82,34 @@ export default function StudentDetailPage({
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+  }, [courseId, quizId, studentId]);
+
+  useEffect(() => {
+    fetch(`/api/notes?courseId=${courseId}&quizId=${quizId}&studentId=${studentId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.found) setSavedNote(data.note);
+      })
+      .catch(() => {})
+      .finally(() => setNoteLoading(false));
+  }, [courseId, quizId, studentId]);
+
+  const generateNote = useCallback(async () => {
+    setNoteGenerating(true);
+    try {
+      const res = await fetch("/api/notes/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId, quizId, studentId }),
+      });
+      const data = await res.json();
+      if (data.success && data.note) {
+        setSavedNote(data.note);
+      }
+    } catch {
+      // silent
+    }
+    setNoteGenerating(false);
   }, [courseId, quizId, studentId]);
 
   if (loading) return <p className="edu-muted">Loading student details…</p>;
@@ -172,6 +219,26 @@ export default function StudentDetailPage({
             <p style={{ fontSize: 13, color: "#5A5048", lineHeight: 1.5 }}>{iv.action}</p>
           </div>
         ))}
+      </div>
+
+      <div className="edu-fade-in" style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h3 className="edu-heading" style={{ fontSize: 16, margin: 0 }}>Asset Note</h3>
+          {!savedNote && !noteLoading && (
+            <button className="edu-btn" style={{ padding: "8px 18px", fontSize: 13 }} onClick={generateNote} disabled={noteGenerating}>
+              {noteGenerating ? "Generating…" : "Generate Asset Note"}
+            </button>
+          )}
+        </div>
+        {noteLoading && <p className="edu-muted" style={{ fontSize: 13 }}>Checking for existing note…</p>}
+        {noteGenerating && !savedNote && (
+          <div className="edu-card" style={{ padding: 24, textAlign: "center" }}>
+            <p className="edu-muted" style={{ fontSize: 13 }}>Generating personalized note with AI…</p>
+          </div>
+        )}
+        {savedNote && (
+          <StudentNoteCard note={savedNote} onRegenerate={generateNote} regenerating={noteGenerating} />
+        )}
       </div>
 
       <div style={{ display: "flex", gap: 10 }}>

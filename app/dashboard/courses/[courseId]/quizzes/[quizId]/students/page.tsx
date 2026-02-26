@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, useCallback, use } from "react";
 import Link from "next/link";
 import { routes } from "@/lib/routes";
 
@@ -12,12 +12,27 @@ interface StudentAnalysis {
   rationale: string;
 }
 
+interface BatchResult {
+  generated: number;
+  failed: number;
+  total: number;
+}
+
 const RISK_COLORS: Record<string, { bg: string; color: string }> = {
   critical: { bg: "#FDECEA", color: "#A63D2E" },
   high: { bg: "#FEF4E5", color: "#A25E1A" },
   medium: { bg: "#FEF8E7", color: "#8B6914" },
   low: { bg: "#E9F3E5", color: "#3D7A2E" },
 };
+
+const BATCH_FILTERS = [
+  { value: "critical_high", label: "Critical + High (recommended)" },
+  { value: "critical", label: "Critical only" },
+  { value: "high", label: "High only" },
+  { value: "medium", label: "Medium only" },
+  { value: "low", label: "Low only" },
+  { value: "all", label: "All students" },
+] as const;
 
 export default function StudentsPage({ params }: { params: Promise<{ courseId: string; quizId: string }> }) {
   const { courseId, quizId } = use(params);
@@ -26,6 +41,10 @@ export default function StudentsPage({ params }: { params: Promise<{ courseId: s
   const [search, setSearch] = useState("");
   const [riskFilter, setRiskFilter] = useState("all");
   const [emailMap, setEmailMap] = useState<Record<string, string>>({});
+  const [batchFilter, setBatchFilter] = useState("critical_high");
+  const [batchGenerating, setBatchGenerating] = useState(false);
+  const [batchResult, setBatchResult] = useState<BatchResult | null>(null);
+  const [showBatchPanel, setShowBatchPanel] = useState(false);
 
   useEffect(() => {
     fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quizId}`)
@@ -39,6 +58,29 @@ export default function StudentsPage({ params }: { params: Promise<{ courseId: s
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [courseId, quizId]);
+
+  const handleBatchGenerate = useCallback(async () => {
+    setBatchGenerating(true);
+    setBatchResult(null);
+    try {
+      const res = await fetch("/api/notes/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId, quizId, categoryFilter: batchFilter }),
+      });
+      const data = await res.json();
+      if (data.success && data.result) {
+        setBatchResult({
+          generated: data.result.generated,
+          failed: data.result.failed,
+          total: data.result.total,
+        });
+      }
+    } catch {
+      // silent
+    }
+    setBatchGenerating(false);
+  }, [courseId, quizId, batchFilter]);
 
   const filtered = students
     .filter((s) => riskFilter === "all" || s.riskLevel === riskFilter)
@@ -67,10 +109,60 @@ export default function StudentsPage({ params }: { params: Promise<{ courseId: s
 
   return (
     <div>
-      <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 4 }}>Students</h1>
-      <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 16 }}>
-        {students.length} student(s) analyzed
-      </p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+        <div>
+          <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 4 }}>Students</h1>
+          <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 16 }}>
+            {students.length} student(s) analyzed
+          </p>
+        </div>
+        <button
+          className="edu-btn edu-fade-in"
+          style={{ padding: "8px 18px", fontSize: 13 }}
+          onClick={() => setShowBatchPanel(!showBatchPanel)}
+        >
+          Batch Generate Notes
+        </button>
+      </div>
+
+      {showBatchPanel && (
+        <div className="edu-card edu-fade-in" style={{ padding: 20, marginBottom: 16 }}>
+          <h3 className="edu-heading" style={{ fontSize: 15, marginBottom: 12 }}>Batch Note Generation</h3>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
+            <label style={{ fontSize: 13, color: "#5A5048" }}>Category:</label>
+            <select
+              value={batchFilter}
+              onChange={(e) => setBatchFilter(e.target.value)}
+              style={{ padding: "6px 12px", border: "1px solid #E8DFD4", borderRadius: 6, fontSize: 13, background: "#FFF" }}
+            >
+              {BATCH_FILTERS.map((f) => (
+                <option key={f.value} value={f.value}>{f.label}</option>
+              ))}
+            </select>
+            <button
+              className="edu-btn"
+              style={{ padding: "6px 16px", fontSize: 13 }}
+              onClick={handleBatchGenerate}
+              disabled={batchGenerating}
+            >
+              {batchGenerating ? "Generating…" : "Generate"}
+            </button>
+          </div>
+          {batchGenerating && (
+            <p className="edu-muted" style={{ fontSize: 13 }}>
+              Generating notes with AI… This may take a moment for large batches.
+            </p>
+          )}
+          {batchResult && (
+            <div style={{ background: batchResult.failed > 0 ? "#FEF8E7" : "#E9F3E5", borderRadius: 6, padding: "10px 14px", fontSize: 13 }}>
+              <strong>{batchResult.generated}</strong> of {batchResult.total} notes generated successfully.
+              {batchResult.failed > 0 && (
+                <span style={{ color: "#A63D2E" }}> {batchResult.failed} failed — open student detail to retry.</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="edu-fade-in edu-fd1" style={{ display: "flex", gap: 10, marginBottom: 16 }}>
         <input

@@ -4,6 +4,7 @@ import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { routes } from "@/lib/routes";
 import TrendChart from "@/lib/charts/TrendChart";
+import HistoryAnalysisPanel from "@/components/analysis/HistoryAnalysisPanel";
 
 interface QuizAnalysis {
   quizId: string;
@@ -78,6 +79,8 @@ export default function HistoryPage({ params }: { params: Promise<{ courseId: st
       <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 20 }}>
         {snapshots.length} analyzed quiz(es) for this course
       </p>
+
+      <HistoryAnalysisPanel courseId={courseId} />
 
       {snapshots.length > 0 && (
         <div className="edu-card edu-fade-in edu-fd2" style={{ padding: 24, marginBottom: 20 }}>
