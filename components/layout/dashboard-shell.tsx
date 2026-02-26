@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  DashboardBootstrapProvider,
+  type BootstrapStatusResponse,
+} from "@/components/layout/dashboard-bootstrap-context";
 import { routes } from "@/lib/routes";
 
 type Breadcrumb = { label: string; href: string };
@@ -21,17 +25,6 @@ interface AuthStatusResponse {
   integrations: {
     classroom: "connected" | "needs_reconnect" | "not_connected";
     forms: "connected" | "needs_reconnect" | "not_connected";
-  };
-}
-
-interface BootstrapStatusResponse {
-  hasInitialSync: boolean;
-  bootstrapStatus: "pending" | "syncing" | "completed" | "error";
-  lastAutoSyncAt: number;
-  lastBootstrapError: string;
-  stats: {
-    courses: number;
-    quizzes: number;
   };
 }
 
@@ -194,6 +187,15 @@ export default function DashboardShell({
     async (mode: "initial" | "refresh" = "refresh") => {
       if (runningBootstrap) return;
       setRunningBootstrap(true);
+      setBootstrap((prev) =>
+        prev
+          ? {
+              ...prev,
+              bootstrapStatus: "syncing",
+              lastBootstrapError: "",
+            }
+          : prev,
+      );
       try {
         await fetch("/api/bootstrap/run", {
           method: "POST",
@@ -304,24 +306,33 @@ export default function DashboardShell({
         .slice(0, 2)
     : "?";
   const lastSyncLabel = bootstrap ? formatLastSync(bootstrap.lastAutoSyncAt) : "Never";
+  const bootstrapContextValue = useMemo(
+    () => ({
+      bootstrap,
+      runningBootstrap,
+      runBootstrap,
+    }),
+    [bootstrap, runBootstrap, runningBootstrap],
+  );
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
-      <aside
-        style={{
-          width: 230,
-          height: "100vh",
-          padding: "22px 0",
-          display: "flex",
-          flexDirection: "column",
-          flexShrink: 0,
-          position: "sticky",
-          top: 0,
-          alignSelf: "flex-start",
-          background: "#FFFFFF",
-          borderRight: "1px solid #E8DFD4",
-        }}
-      >
+    <DashboardBootstrapProvider value={bootstrapContextValue}>
+      <div style={{ display: "flex", minHeight: "100vh" }}>
+        <aside
+          style={{
+            width: 230,
+            height: "100vh",
+            padding: "22px 0",
+            display: "flex",
+            flexDirection: "column",
+            flexShrink: 0,
+            position: "sticky",
+            top: 0,
+            alignSelf: "flex-start",
+            background: "#FFFFFF",
+            borderRight: "1px solid #E8DFD4",
+          }}
+        >
         <Link href={routes.landing()} style={{ textDecoration: "none" }}>
           <div style={{ padding: "0 24px 18px", borderBottom: "1px solid #F0ECE5" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -521,85 +532,86 @@ export default function DashboardShell({
             </div>
           )}
         </div>
-      </aside>
+        </aside>
 
-      <main style={{ flex: 1, display: "flex", flexDirection: "column", background: "#FAF6F0" }}>
-        <div
-          style={{
-            padding: "10px 28px",
-            borderBottom: "1px solid #F0ECE5",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: 13,
-            background: "#FFFFFF",
-          }}
-        >
-          <Suspense fallback={<span style={{ color: "#B5AA9C" }}>Dashboard</span>}>
-            <BreadcrumbTrail pathname={pathname} />
-          </Suspense>
-        </div>
-        {authStatus?.authenticated && bootstrap && (
+        <main style={{ flex: 1, display: "flex", flexDirection: "column", background: "#FAF6F0" }}>
           <div
             style={{
               padding: "10px 28px",
               borderBottom: "1px solid #F0ECE5",
-              background: "#FFFDF9",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 13,
+              background: "#FFFFFF",
             }}
           >
-            {!integrationsConnected ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <p style={{ margin: 0, fontSize: 13, color: "#8B6914" }}>
-                  Google access needs reconnect before syncing can continue.
-                </p>
-                <p style={{ margin: 0, fontSize: 12, color: "#B5AA9C" }}>
-                  Open Settings from your account menu in the sidebar footer.
-                </p>
-              </div>
-            ) : bootstrap.bootstrapStatus === "syncing" ? (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                <p style={{ margin: 0, fontSize: 13, color: "#8B6914" }}>
-                  Preparing classroom data in background... {bootstrap.stats.courses} course(s), {bootstrap.stats.quizzes} quiz(es).
-                </p>
-                <button className="edu-btn-outline" style={{ fontSize: 12, padding: "4px 10px" }} disabled>
-                  Syncing...
-                </button>
-              </div>
-            ) : bootstrap.bootstrapStatus === "error" ? (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                <p style={{ margin: 0, fontSize: 13, color: "#A63D2E" }}>
-                  {bootstrap.lastBootstrapError || "Data refresh failed. Retry to refresh classroom data."}
-                </p>
-                <button
-                  className="edu-btn-outline"
-                  style={{ fontSize: 12, padding: "4px 10px" }}
-                  onClick={() =>
-                    void runBootstrap(bootstrap.hasInitialSync ? "refresh" : "initial")
-                  }
-                  disabled={runningBootstrap}
-                >
-                  {runningBootstrap ? "Retrying..." : "Retry Sync"}
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                <p style={{ margin: 0, fontSize: 13, color: "#5F738A" }}>
-                  Data ready - last synced {lastSyncLabel}. {bootstrap.stats.courses} course(s), {bootstrap.stats.quizzes} quiz(es).
-                </p>
-                <button
-                  className="edu-btn-outline"
-                  style={{ fontSize: 12, padding: "4px 10px" }}
-                  onClick={() => void runBootstrap("refresh")}
-                  disabled={runningBootstrap}
-                >
-                  {runningBootstrap ? "Refreshing..." : "Refresh"}
-                </button>
-              </div>
-            )}
+            <Suspense fallback={<span style={{ color: "#B5AA9C" }}>Dashboard</span>}>
+              <BreadcrumbTrail pathname={pathname} />
+            </Suspense>
           </div>
-        )}
-        <div style={{ flex: 1, padding: 28, overflowY: "auto" }}>{children}</div>
-      </main>
-    </div>
+          {authStatus?.authenticated && bootstrap && (
+            <div
+              style={{
+                padding: "10px 28px",
+                borderBottom: "1px solid #F0ECE5",
+                background: "#FFFDF9",
+              }}
+            >
+              {!integrationsConnected ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <p style={{ margin: 0, fontSize: 13, color: "#8B6914" }}>
+                    Google access needs reconnect before syncing can continue.
+                  </p>
+                  <p style={{ margin: 0, fontSize: 12, color: "#B5AA9C" }}>
+                    Open Settings from your account menu in the sidebar footer.
+                  </p>
+                </div>
+              ) : bootstrap.bootstrapStatus === "syncing" ? (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                  <p style={{ margin: 0, fontSize: 13, color: "#8B6914" }}>
+                    Preparing classroom data in background... {bootstrap.stats.courses} course(s), {bootstrap.stats.quizzes} quiz(es).
+                  </p>
+                  <button className="edu-btn-outline" style={{ fontSize: 12, padding: "4px 10px" }} disabled>
+                    Syncing...
+                  </button>
+                </div>
+              ) : bootstrap.bootstrapStatus === "error" ? (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                  <p style={{ margin: 0, fontSize: 13, color: "#A63D2E" }}>
+                    {bootstrap.lastBootstrapError || "Data refresh failed. Retry to refresh classroom data."}
+                  </p>
+                  <button
+                    className="edu-btn-outline"
+                    style={{ fontSize: 12, padding: "4px 10px" }}
+                    onClick={() =>
+                      void runBootstrap(bootstrap.hasInitialSync ? "refresh" : "initial")
+                    }
+                    disabled={runningBootstrap}
+                  >
+                    {runningBootstrap ? "Retrying..." : "Retry Sync"}
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                  <p style={{ margin: 0, fontSize: 13, color: "#5F738A" }}>
+                    Data ready - last synced {lastSyncLabel}. {bootstrap.stats.courses} course(s), {bootstrap.stats.quizzes} quiz(es).
+                  </p>
+                  <button
+                    className="edu-btn-outline"
+                    style={{ fontSize: 12, padding: "4px 10px" }}
+                    onClick={() => void runBootstrap("refresh")}
+                    disabled={runningBootstrap}
+                  >
+                    {runningBootstrap ? "Refreshing..." : "Refresh"}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          <div style={{ flex: 1, padding: 28, overflowY: "auto" }}>{children}</div>
+        </main>
+      </div>
+    </DashboardBootstrapProvider>
   );
 }

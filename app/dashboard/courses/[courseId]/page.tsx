@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, use } from "react";
+import { useCallback, useEffect, useRef, useState, use } from "react";
+import { useDashboardBootstrapContext } from "@/components/layout/dashboard-bootstrap-context";
 import { routes } from "@/lib/routes";
 
 interface Course {
@@ -25,32 +26,54 @@ interface Quiz {
 
 export default function CourseDetailPage({ params }: { params: Promise<{ courseId: string }> }) {
   const { courseId } = use(params);
+  const { bootstrap } = useDashboardBootstrapContext();
   const [course, setCourse] = useState<Course | null>(null);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const lastAppliedSyncAtRef = useRef(0);
+
+  const loadCourseData = useCallback(async () => {
+    const [cRes, qRes] = await Promise.all([
+      fetch("/api/dashboard/courses", { cache: "no-store" }),
+      fetch(`/api/dashboard/quizzes?courseId=${courseId}`, { cache: "no-store" }),
+    ]);
+    const cData = (await cRes.json()) as { courses?: Course[] };
+    const qData = (await qRes.json()) as { quizzes?: Quiz[] };
+    const found = (cData.courses ?? []).find((item) => item.id === courseId);
+    setCourse(found ?? null);
+    setQuizzes(qData.quizzes ?? []);
+  }, [courseId]);
 
   useEffect(() => {
-    let cancelled = false;
     async function load() {
       try {
-        const [cRes, qRes] = await Promise.all([
-          fetch("/api/dashboard/courses"),
-          fetch(`/api/dashboard/quizzes?courseId=${courseId}`),
-        ]);
-        const cData = await cRes.json();
-        const qData = await qRes.json();
-        if (!cancelled) {
-          const found = (cData.courses ?? []).find((c: Course) => c.id === courseId);
-          setCourse(found ?? null);
-          setQuizzes(qData.quizzes ?? []);
-        }
+        await loadCourseData();
       } catch {
         // silent
       }
     }
-    load();
-    return () => { cancelled = true; };
-  }, [courseId]);
+    void load();
+  }, [loadCourseData]);
+
+  useEffect(() => {
+    if (!bootstrap?.lastAutoSyncAt) return;
+    if (lastAppliedSyncAtRef.current === 0) {
+      lastAppliedSyncAtRef.current = bootstrap.lastAutoSyncAt;
+      return;
+    }
+    if (bootstrap.lastAutoSyncAt <= lastAppliedSyncAtRef.current) {
+      return;
+    }
+    lastAppliedSyncAtRef.current = bootstrap.lastAutoSyncAt;
+    async function refreshFromBootstrap() {
+      try {
+        await loadCourseData();
+      } catch {
+        // silent
+      }
+    }
+    void refreshFromBootstrap();
+  }, [bootstrap?.lastAutoSyncAt, loadCourseData]);
 
   async function syncQuizzes() {
     setSyncing(true);
@@ -60,15 +83,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ courseI
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ courseId }),
       });
-      const [cRes, qRes] = await Promise.all([
-        fetch("/api/dashboard/courses"),
-        fetch(`/api/dashboard/quizzes?courseId=${courseId}`),
-      ]);
-      const cData = await cRes.json();
-      const qData = await qRes.json();
-      const found = (cData.courses ?? []).find((c: Course) => c.id === courseId);
-      setCourse(found ?? null);
-      setQuizzes(qData.quizzes ?? []);
+      await loadCourseData();
     } catch {
       // silent
     }

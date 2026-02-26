@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, use } from "react";
+import { useCallback, useEffect, useRef, useState, use } from "react";
+import { useDashboardBootstrapContext } from "@/components/layout/dashboard-bootstrap-context";
 import { routes } from "@/lib/routes";
 
 interface Quiz {
@@ -16,21 +17,25 @@ interface Quiz {
 
 export default function QuizzesPage({ params }: { params: Promise<{ courseId: string }> }) {
   const { courseId } = use(params);
+  const { bootstrap } = useDashboardBootstrapContext();
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const lastAppliedSyncAtRef = useRef(0);
+
+  const loadQuizzes = useCallback(async () => {
+    const res = await fetch(`/api/dashboard/quizzes?courseId=${courseId}`, {
+      cache: "no-store",
+    });
+    const data = (await res.json()) as { quizzes?: Quiz[] };
+    setQuizzes(data.quizzes ?? []);
+  }, [courseId]);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        const res = await fetch(`/api/dashboard/quizzes?courseId=${courseId}`, {
-          cache: "no-store",
-        });
-        const data = (await res.json()) as { quizzes?: Quiz[] };
-        if (!cancelled) {
-          setQuizzes(data.quizzes ?? []);
-        }
+        await loadQuizzes();
       } catch {
         // silent
       }
@@ -42,7 +47,27 @@ export default function QuizzesPage({ params }: { params: Promise<{ courseId: st
     return () => {
       cancelled = true;
     };
-  }, [courseId]);
+  }, [loadQuizzes]);
+
+  useEffect(() => {
+    if (!bootstrap?.lastAutoSyncAt || loading) return;
+    if (lastAppliedSyncAtRef.current === 0) {
+      lastAppliedSyncAtRef.current = bootstrap.lastAutoSyncAt;
+      return;
+    }
+    if (bootstrap.lastAutoSyncAt <= lastAppliedSyncAtRef.current) {
+      return;
+    }
+    lastAppliedSyncAtRef.current = bootstrap.lastAutoSyncAt;
+    async function refreshFromBootstrap() {
+      try {
+        await loadQuizzes();
+      } catch {
+        // silent
+      }
+    }
+    void refreshFromBootstrap();
+  }, [bootstrap?.lastAutoSyncAt, loadQuizzes, loading]);
 
   async function syncQuizzes() {
     setSyncing(true);
@@ -52,11 +77,7 @@ export default function QuizzesPage({ params }: { params: Promise<{ courseId: st
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ courseId }),
       });
-      const res = await fetch(`/api/dashboard/quizzes?courseId=${courseId}`, {
-        cache: "no-store",
-      });
-      const data = (await res.json()) as { quizzes?: Quiz[] };
-      setQuizzes(data.quizzes ?? []);
+      await loadQuizzes();
     } catch {
       // silent
     }

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useDashboardBootstrapContext } from "@/components/layout/dashboard-bootstrap-context";
 import { routes } from "@/lib/routes";
 
 interface Course {
@@ -12,18 +13,12 @@ interface Course {
   lastSynced: string | null;
 }
 
-interface BootstrapStatusResponse {
-  hasInitialSync: boolean;
-  bootstrapStatus: "pending" | "syncing" | "completed" | "error";
-  lastAutoSyncAt: number;
-  lastBootstrapError: string;
-}
-
 export default function CoursesPage() {
+  const { bootstrap, runningBootstrap, runBootstrap } =
+    useDashboardBootstrapContext();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [bootstrap, setBootstrap] = useState<BootstrapStatusResponse | null>(null);
+  const lastAppliedSyncAtRef = useRef(0);
 
   const loadCourses = useCallback(async () => {
     const res = await fetch("/api/dashboard/courses", { cache: "no-store" });
@@ -31,18 +26,11 @@ export default function CoursesPage() {
     setCourses(data.courses ?? []);
   }, []);
 
-  const loadBootstrapStatus = useCallback(async () => {
-    const res = await fetch("/api/bootstrap/status", { cache: "no-store" });
-    if (!res.ok) return;
-    const data = (await res.json()) as BootstrapStatusResponse;
-    setBootstrap(data);
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        await Promise.all([loadCourses(), loadBootstrapStatus()]);
+        await loadCourses();
       } catch {
         // silent
       }
@@ -54,31 +42,34 @@ export default function CoursesPage() {
     return () => {
       cancelled = true;
     };
-  }, [loadBootstrapStatus, loadCourses]);
+  }, [loadCourses]);
 
   useEffect(() => {
-    if (bootstrap?.bootstrapStatus !== "syncing") return;
-    const interval = window.setInterval(() => {
-      void Promise.all([loadCourses(), loadBootstrapStatus()]);
-    }, 2500);
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [bootstrap, loadBootstrapStatus, loadCourses]);
+    if (!bootstrap?.lastAutoSyncAt || loading) return;
+    if (lastAppliedSyncAtRef.current === 0) {
+      lastAppliedSyncAtRef.current = bootstrap.lastAutoSyncAt;
+      return;
+    }
+    if (bootstrap.lastAutoSyncAt <= lastAppliedSyncAtRef.current) {
+      return;
+    }
+    lastAppliedSyncAtRef.current = bootstrap.lastAutoSyncAt;
+    async function refreshFromBootstrap() {
+      try {
+        await loadCourses();
+      } catch {
+        // silent
+      }
+    }
+    void refreshFromBootstrap();
+  }, [bootstrap?.lastAutoSyncAt, loadCourses, loading]);
 
   async function syncCourses() {
-    setSyncing(true);
     try {
-      await fetch("/api/bootstrap/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "refresh", analyzeLimit: 0 }),
-      });
-      await Promise.all([loadCourses(), loadBootstrapStatus()]);
+      await runBootstrap("refresh");
     } catch {
       // silent
     }
-    setSyncing(false);
   }
 
   return (
@@ -91,9 +82,9 @@ export default function CoursesPage() {
           className="edu-btn-outline"
           style={{ fontSize: 12, padding: "6px 14px" }}
           onClick={syncCourses}
-          disabled={syncing}
+          disabled={runningBootstrap}
         >
-          {syncing ? "Refreshing..." : "Refresh from Classroom"}
+          {runningBootstrap ? "Refreshing..." : "Refresh from Classroom"}
         </button>
       </div>
       <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 20 }}>
@@ -101,7 +92,7 @@ export default function CoursesPage() {
           ? "Loading..."
           : courses.length > 0
             ? `${courses.length} course(s) from Google Classroom`
-            : bootstrap?.bootstrapStatus === "syncing" || syncing
+            : bootstrap?.bootstrapStatus === "syncing" || runningBootstrap
               ? "Preparing courses from Google Classroom..."
               : bootstrap?.bootstrapStatus === "error"
                 ? "Could not refresh courses. Retry to continue."
@@ -135,12 +126,12 @@ export default function CoursesPage() {
         {!loading && courses.length === 0 && (
           <div className="edu-card" style={{ padding: 32, textAlign: "center" }}>
             <p className="edu-muted" style={{ marginBottom: 14 }}>
-              {bootstrap?.bootstrapStatus === "syncing" || syncing
+              {bootstrap?.bootstrapStatus === "syncing" || runningBootstrap
                 ? "Preparing your courses. This usually takes less than a minute."
                 : "No courses found. Refresh from Classroom to get started."}
             </p>
-            <button className="edu-btn" onClick={syncCourses} disabled={syncing}>
-              {syncing ? "Refreshing..." : "Retry Sync"}
+            <button className="edu-btn" onClick={syncCourses} disabled={runningBootstrap}>
+              {runningBootstrap ? "Refreshing..." : "Retry Sync"}
             </button>
             {bootstrap?.lastBootstrapError && (
               <p style={{ fontSize: 12, color: "#A63D2E", marginTop: 10 }}>

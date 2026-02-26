@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useDashboardBootstrapContext } from "@/components/layout/dashboard-bootstrap-context";
 import { routes } from "@/lib/routes";
 
 interface Course {
@@ -21,19 +22,13 @@ interface Quiz {
   totalStudents: number;
 }
 
-interface BootstrapStatusResponse {
-  hasInitialSync: boolean;
-  bootstrapStatus: "pending" | "syncing" | "completed" | "error";
-  lastAutoSyncAt: number;
-  lastBootstrapError: string;
-}
-
 export default function DashboardPage() {
+  const { bootstrap, runningBootstrap, runBootstrap } =
+    useDashboardBootstrapContext();
   const [courses, setCourses] = useState<Course[]>([]);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
-  const [syncing, setSyncing] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [bootstrap, setBootstrap] = useState<BootstrapStatusResponse | null>(null);
+  const lastAppliedSyncAtRef = useRef(0);
 
   const loadDashboardData = useCallback(async () => {
     const [cRes, qRes] = await Promise.all([
@@ -46,18 +41,11 @@ export default function DashboardPage() {
     setQuizzes(qData.quizzes ?? []);
   }, []);
 
-  const loadBootstrapStatus = useCallback(async () => {
-    const res = await fetch("/api/bootstrap/status", { cache: "no-store" });
-    if (!res.ok) return;
-    const data = (await res.json()) as BootstrapStatusResponse;
-    setBootstrap(data);
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        await Promise.all([loadDashboardData(), loadBootstrapStatus()]);
+        await loadDashboardData();
       } catch {
         // silent
       }
@@ -69,31 +57,34 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [loadBootstrapStatus, loadDashboardData]);
+  }, [loadDashboardData]);
 
   useEffect(() => {
-    if (bootstrap?.bootstrapStatus !== "syncing") return;
-    const interval = window.setInterval(() => {
-      void Promise.all([loadDashboardData(), loadBootstrapStatus()]);
-    }, 2500);
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [bootstrap, loadBootstrapStatus, loadDashboardData]);
+    if (!bootstrap?.lastAutoSyncAt || !loaded) return;
+    if (lastAppliedSyncAtRef.current === 0) {
+      lastAppliedSyncAtRef.current = bootstrap.lastAutoSyncAt;
+      return;
+    }
+    if (bootstrap.lastAutoSyncAt <= lastAppliedSyncAtRef.current) {
+      return;
+    }
+    lastAppliedSyncAtRef.current = bootstrap.lastAutoSyncAt;
+    async function refreshFromBootstrap() {
+      try {
+        await loadDashboardData();
+      } catch {
+        // silent
+      }
+    }
+    void refreshFromBootstrap();
+  }, [bootstrap?.lastAutoSyncAt, loadDashboardData, loaded]);
 
   async function syncCourses() {
-    setSyncing(true);
     try {
-      await fetch("/api/bootstrap/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "refresh", analyzeLimit: 0 }),
-      });
-      await Promise.all([loadDashboardData(), loadBootstrapStatus()]);
+      await runBootstrap("refresh");
     } catch {
       // silent
     }
-    setSyncing(false);
   }
 
   const analyzedCount = quizzes.filter((q) => q.analysisStatus === "completed").length;
@@ -111,16 +102,16 @@ export default function DashboardPage() {
           className="edu-btn-outline"
           style={{ fontSize: 12, padding: "6px 14px" }}
           onClick={syncCourses}
-          disabled={syncing}
+          disabled={runningBootstrap}
         >
-          {syncing ? "Refreshing..." : "Refresh Data"}
+          {runningBootstrap ? "Refreshing..." : "Refresh Data"}
         </button>
       </div>
       <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 28 }}>
         {loaded
           ? courses.length > 0
             ? "Your classroom overview at a glance."
-            : bootstrap?.bootstrapStatus === "syncing" || syncing
+            : bootstrap?.bootstrapStatus === "syncing" || runningBootstrap
               ? "Preparing your classroom data in the background..."
               : bootstrap?.bootstrapStatus === "error"
                 ? "Data sync needs attention. Retry refresh to continue."
@@ -176,18 +167,18 @@ export default function DashboardPage() {
           {quizzes.length === 0 ? (
             <div>
               <p className="edu-muted" style={{ fontSize: 13, marginBottom: 12 }}>
-                {bootstrap?.bootstrapStatus === "syncing" || syncing
+                {bootstrap?.bootstrapStatus === "syncing" || runningBootstrap
                   ? "Quiz data is being prepared."
                   : "No quizzes synced yet."}
               </p>
-              {bootstrap?.bootstrapStatus !== "syncing" && (
+              {bootstrap?.bootstrapStatus !== "syncing" && !runningBootstrap && (
                 <button
                   className="edu-btn-outline"
                   style={{ fontSize: 12 }}
                   onClick={syncCourses}
-                  disabled={syncing}
+                  disabled={runningBootstrap}
                 >
-                  {syncing ? "Refreshing..." : "Retry Sync"}
+                  {runningBootstrap ? "Refreshing..." : "Retry Sync"}
                 </button>
               )}
             </div>
