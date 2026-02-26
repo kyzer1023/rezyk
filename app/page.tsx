@@ -1,180 +1,94 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { themes } from "@/lib/renditions";
 
-export default function LandingPage() {
-  const router = useRouter();
-  const [checking, setChecking] = useState(true);
+const entries = Object.values(themes);
 
-  useEffect(() => {
-    fetch("/api/auth/status")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.authenticated) {
-          router.replace("/dashboard");
-        } else {
-          setChecking(false);
-        }
-      })
-      .catch(() => setChecking(false));
-  }, [router]);
-
-  if (checking) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background: "#FAF6F0",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <p style={{ color: "#8A7D6F", fontSize: 14 }}>Checking session…</p>
-      </div>
-    );
-  }
-
+export default function HubPage() {
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#FAF6F0",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-        position: "relative",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: "50vh",
-          background:
-            "linear-gradient(180deg, #C17A56 0%, #D4956E 60%, #FAF6F0 100%)",
-          opacity: 0.12,
-          pointerEvents: "none",
-        }}
-      />
-
-      <div
-        className="edu-fade-in"
-        style={{
-          position: "relative",
-          zIndex: 1,
-          maxWidth: 440,
-          width: "100%",
-          textAlign: "center",
-        }}
-      >
-        <div
-          style={{
-            width: 52,
-            height: 52,
-            borderRadius: "50%",
-            background: "#C17A56",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            margin: "0 auto 24px",
-          }}
-        >
-          <svg
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#FFFFFF"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-          </svg>
-        </div>
-
-        <h1
-          className="edu-heading edu-fade-in"
-          style={{
-            fontSize: 36,
-            marginBottom: 10,
-            fontWeight: 600,
-            letterSpacing: -0.5,
-          }}
-        >
-          EduInsight AI
-        </h1>
-        <p
-          className="edu-fade-in edu-fd1"
-          style={{
-            fontSize: 16,
-            lineHeight: 1.7,
-            color: "#8A7D6F",
-            marginBottom: 36,
-          }}
-        >
-          Understand your classroom, one quiz at a time. Data-driven insights
-          for thoughtful teaching.
-        </p>
-
-        <div
-          className="edu-card edu-fade-in edu-fd2"
-          style={{ padding: "36px 32px" }}
-        >
-          <a href="/api/auth/login" style={{ textDecoration: "none" }}>
-            <button
-              className="edu-btn"
-              style={{ fontSize: 16, padding: "14px 32px", width: "100%" }}
-            >
-              <span
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 10,
-                }}
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                </svg>
-                Sign in with Google
-              </span>
-            </button>
-          </a>
-
-          <p
+    <div style={{ minHeight: "100vh", background: "#FAF6F0", padding: "40px 20px" }}>
+      <div style={{ maxWidth: 820, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 48 }}>
+          <div
             style={{
-              fontSize: 12,
-              color: "#B5AA9C",
-              marginTop: 16,
-              lineHeight: 1.6,
+              width: 52, height: 52, borderRadius: "50%", background: "#C17A56",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              margin: "0 auto 20px",
             }}
           >
-            Grants read access to your Google Classroom courses and Forms
-            responses. Your data stays private.
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+            </svg>
+          </div>
+          <h1 style={{ fontFamily: "Georgia, serif", fontSize: 32, color: "#3D3229", marginBottom: 8 }}>
+            EduInsight AI
+          </h1>
+          <p style={{ fontSize: 16, color: "#8A7D6F", maxWidth: 480, margin: "0 auto" }}>
+            Choose a design rendition to explore the full teacher workflow with mock data.
           </p>
         </div>
 
-        <p
-          className="edu-fade-in edu-fd3"
-          style={{ fontSize: 12, color: "#B5AA9C", marginTop: 28 }}
-        >
-          SDG 4 &middot; Quality Education &middot; KitaHack 2026
-        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240, 1fr))", gap: 16 }}>
+          {entries.map((t) => (
+            <Link key={t.id} href={`/${t.id}`} style={{ textDecoration: "none" }}>
+              <div
+                style={{
+                  background: t.cardBg,
+                  border: `1.5px solid ${t.cardBorder}`,
+                  borderRadius: 10,
+                  padding: 24,
+                  cursor: "pointer",
+                  transition: "transform 0.15s, box-shadow 0.15s",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = "translateY(-3px)";
+                  e.currentTarget.style.boxShadow = `0 6px 20px ${t.accentLight}`;
+                  e.currentTarget.style.borderColor = t.accent;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "";
+                  e.currentTarget.style.boxShadow = "";
+                  e.currentTarget.style.borderColor = t.cardBorder;
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                  <div
+                    style={{
+                      width: 40, height: 40, borderRadius: 8,
+                      background: t.accent,
+                      color: "#FFF", display: "flex", alignItems: "center",
+                      justifyContent: "center", fontWeight: 700, fontSize: 18,
+                    }}
+                  >
+                    {t.id}
+                  </div>
+                  <h2 style={{ fontSize: 17, fontWeight: 600, color: t.text, margin: 0 }}>
+                    {t.name}
+                  </h2>
+                </div>
+                <p style={{ fontSize: 13, color: t.textSecondary, margin: 0, lineHeight: 1.5 }}>
+                  {t.tagline}
+                </p>
+                <div style={{ marginTop: 16, display: "flex", gap: 6 }}>
+                  {Object.values(t.risk).map((r, i) => (
+                    <div key={i} style={{ width: 20, height: 6, borderRadius: 3, background: r.bg, border: `1px solid ${r.text}30` }} />
+                  ))}
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 36 }}>
+          <Link
+            href="/dashboard"
+            style={{ fontSize: 13, color: "#8A7D6F", textDecoration: "underline" }}
+          >
+            Open live app (requires auth) →
+          </Link>
+        </div>
       </div>
     </div>
   );
