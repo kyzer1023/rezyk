@@ -101,9 +101,9 @@ export default function QuizzesPage({ params }: { params: Promise<{ courseId: st
       </div>
       <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 20 }}>
         {loading
-          ? "Loading..."
+          ? "Loading quizzes..."
           : syncing
-            ? "Preparing quizzes from Google Classroom..."
+            ? "Syncing quizzes from Google Classroom..."
             : `${quizzes.length} quiz(es) with linked Google Forms`}
       </p>
 
@@ -145,11 +145,8 @@ export default function QuizzesPage({ params }: { params: Promise<{ courseId: st
             <p className="edu-muted" style={{ marginBottom: 12 }}>
               {syncing
                 ? "Syncing quizzes..."
-                : "No quiz assignments found for this course."}
+                : "No quiz assignments found for this course yet. Use Refresh Quizzes above to try again."}
             </p>
-            <button className="edu-btn" onClick={syncQuizzes} disabled={syncing}>
-              {syncing ? "Syncing..." : "Sync Quizzes"}
-            </button>
           </div>
         )}
       </div>

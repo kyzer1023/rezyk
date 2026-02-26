@@ -18,7 +18,6 @@ export default function HistoryPage({ params }: { params: Promise<{ courseId: st
   const { courseId } = use(params);
   const [snapshots, setSnapshots] = useState<QuizAnalysis[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
 
   const fetchHistorySnapshots = useCallback(async (): Promise<QuizAnalysis[]> => {
     const qRes = await fetch(`/api/dashboard/quizzes?courseId=${courseId}`, {
@@ -82,15 +81,10 @@ export default function HistoryPage({ params }: { params: Promise<{ courseId: st
     };
   }, [fetchHistorySnapshots]);
 
-  async function refreshHistory() {
-    setRefreshing(true);
-    try {
-      const analyses = await fetchHistorySnapshots();
-      setSnapshots(analyses);
-    } catch {
-      // silent
-    }
-    setRefreshing(false);
+  function getScoreColor(score: number): string {
+    if (score >= 75) return "#2E7D4B";
+    if (score >= 55) return "#A25E1A";
+    return "#A63D2E";
   }
 
   const trendData = snapshots.map((s) => ({
@@ -110,18 +104,10 @@ export default function HistoryPage({ params }: { params: Promise<{ courseId: st
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+      <div style={{ marginBottom: 4 }}>
         <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 0 }}>
           Quiz History
         </h1>
-        <button
-          className="edu-btn-outline"
-          style={{ fontSize: 12, padding: "6px 14px" }}
-          onClick={refreshHistory}
-          disabled={refreshing}
-        >
-          {refreshing ? "Refreshing..." : "Refresh History"}
-        </button>
       </div>
       <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 20 }}>
         {snapshots.length} analyzed quiz(es) for this course
@@ -141,7 +127,7 @@ export default function HistoryPage({ params }: { params: Promise<{ courseId: st
               <div>
                 <p style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>{snap.title}</p>
                 <p className="edu-muted" style={{ fontSize: 12, margin: "4px 0 0" }}>
-                  Avg: {snap.averageScore.toFixed(1)}% &middot;{" "}
+                  Avg: <span style={{ color: getScoreColor(snap.averageScore), fontWeight: 700 }}>{snap.averageScore.toFixed(1)}%</span> &middot;{" "}
                   {new Date(snap.createdAt).toLocaleDateString()} &middot;{" "}
                   Top gaps: {snap.topWeakConcepts.join(", ") || "None"}
                 </p>

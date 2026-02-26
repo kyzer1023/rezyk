@@ -210,3 +210,76 @@ body {
   border: none;
   margin: 16px 0;
 }
+
+.edu-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: #efe7dd;
+}
+
+.edu-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.52) 48%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: eduSkeletonShimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes eduSkeletonShimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.edu-refresh-layer {
+  position: relative;
+}
+
+.edu-refresh-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  overflow: hidden;
+  background: rgba(250, 246, 240, 0.38);
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 10px 12px;
+}
+
+.edu-refresh-overlay > span {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8a7d6f;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid #ece4d9;
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+.edu-refresh-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.4) 48%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: translateX(-100%);
+  animation: eduOverlaySweep 1.9s ease-in-out infinite;
+}
+
+@keyframes eduOverlaySweep {
+  to {
+    transform: translateX(100%);
+  }
+}

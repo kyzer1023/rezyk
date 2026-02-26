@@ -5,6 +5,8 @@ Project objective: help teachers move from high-level quiz scores to fast, quest
 
 Routing and context rule: analysis, insights, and student details are scoped to a selected course and quiz (not aggregated by default across all courses).
 
+Coverage rule for this project phase: analysis coverage is defined as 100% of students with submitted quiz responses in the selected course + quiz context. Non-submitters are surfaced operationally but are out of scope for misconception inference.
+
 ## 2) Primary Personas
 - Teacher (primary): runs quiz sync, reviews risks, and acts on interventions.
 - Student (beneficiary): receives targeted remediation earlier.
@@ -66,14 +68,28 @@ As a teacher, I want to compare current and previous quiz trends so that I can e
 
 Acceptance criteria:
 - Historical analysis snapshots are accessible.
-- Trend direction (improving/stable/declining) is visible.
+- AI-generated trend direction (improving/stable/declining) is visible and supported by evidence.
+- Trend analysis can use both raw quiz response data and prior inferred analysis outputs.
 - Empty history state is handled cleanly.
+
+### UC-08: Generate Personalized Teaching Assets
+As a teacher, I want to generate student-specific intervention assets after analysis so that I can act quickly with targeted support.
+
+Acceptance criteria:
+- Teacher can generate assets for one selected student or batch-generate for at-risk students.
+- Asset package includes:
+  - Intervention note (root cause summary, focus concept, next class action, follow-up action)
+  - Mini-quiz draft (3-5 items, answer key, concept tag per item)
+- Assets are tied to active course + quiz + student context.
+- Outputs are clearly labeled AI-generated draft and are editable before classroom use.
+- Generation failures return safe fallback messaging with retry.
 
 ## 5) Story Prioritization
 - Must have (Preliminary MVP): UC-01 to UC-06
 - Should have: UC-07
+- Could have (stretch but shippable): UC-08
 
 ## 6) Success Conditions
 - Weak concepts identified in under 2 minutes after sync.
 - Teacher review time reduced by at least 30%.
-- Analysis coverage reaches 100% of students in selected quiz.
+- Analysis coverage reaches 100% of submitted responses in selected quiz.

@@ -246,12 +246,14 @@ export default function DashboardShell({
     const isStale =
       !bootstrap.lastAutoSyncAt ||
       Date.now() - bootstrap.lastAutoSyncAt > AUTO_REFRESH_STALE_MS;
+    const hasEmptyCachedStats =
+      bootstrap.stats.courses === 0 && bootstrap.stats.quizzes === 0;
     const shouldRunInitial =
       !bootstrap.hasInitialSync && bootstrap.bootstrapStatus !== "syncing";
     const shouldRunRefresh =
       bootstrap.hasInitialSync &&
       bootstrap.bootstrapStatus !== "syncing" &&
-      isStale;
+      (isStale || hasEmptyCachedStats);
 
     if (!shouldRunInitial && !shouldRunRefresh) {
       return;
@@ -522,9 +524,9 @@ export default function DashboardShell({
                   className="edu-btn-outline"
                   style={{ fontSize: 12, padding: "4px 10px" }}
                   onClick={() => void runBootstrap("refresh")}
-                  disabled={runningBootstrap}
+                  disabled
                 >
-                  {runningBootstrap ? "Refreshing..." : "Refresh"}
+                  Refresh
                 </button>
               </div>
             )}
