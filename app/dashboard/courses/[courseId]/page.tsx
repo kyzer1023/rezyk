@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, use } from "react";
 import { routes } from "@/lib/routes";
+import CourseAnalysisPanel from "@/components/analysis/CourseAnalysisPanel";
 
 interface Course {
   id: string;
@@ -99,7 +100,11 @@ export default function CourseDetailPage({ params }: { params: Promise<{ courseI
         </Link>
       </div>
 
-      <div className="edu-card edu-fade-in edu-fd2" style={{ padding: 24 }}>
+      <div className="edu-fade-in edu-fd2" style={{ marginBottom: 20 }}>
+        <CourseAnalysisPanel courseId={courseId} initialData={null} />
+      </div>
+
+      <div className="edu-card edu-fade-in edu-fd3" style={{ padding: 24 }}>
         <h3 className="edu-heading" style={{ fontSize: 17, marginBottom: 14 }}>
           Quizzes
         </h3>
