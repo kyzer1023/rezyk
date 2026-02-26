@@ -4,6 +4,51 @@ import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { routes } from "@/lib/routes";
 
+interface AnalysisErrorPayload {
+  error?: string;
+  errorClass?: string;
+  diagnostics?: Array<{
+    path?: string;
+    message?: string;
+  }>;
+}
+
+function toAnalysisErrorMessage(payload: unknown): string {
+  if (!payload || typeof payload !== "object") {
+    return "Analysis failed";
+  }
+
+  const result = payload as AnalysisErrorPayload;
+  const base =
+    typeof result.error === "string" && result.error.trim().length > 0
+      ? result.error
+      : "Analysis failed";
+  const errorClass =
+    typeof result.errorClass === "string" && result.errorClass.trim().length > 0
+      ? ` (${result.errorClass})`
+      : "";
+
+  const firstDiagnostic = Array.isArray(result.diagnostics) ? result.diagnostics[0] : undefined;
+  if (!firstDiagnostic || typeof firstDiagnostic !== "object") {
+    return `${base}${errorClass}`;
+  }
+
+  const message =
+    typeof firstDiagnostic.message === "string" && firstDiagnostic.message.trim().length > 0
+      ? firstDiagnostic.message
+      : "";
+  const path =
+    typeof firstDiagnostic.path === "string" && firstDiagnostic.path.trim().length > 0
+      ? `${firstDiagnostic.path}: `
+      : "";
+
+  if (!message) {
+    return `${base}${errorClass}`;
+  }
+
+  return `${base}${errorClass} - ${path}${message}`;
+}
+
 export default function AnalysisPage({ params }: { params: Promise<{ courseId: string; quizId: string }> }) {
   const { courseId, quizId } = use(params);
   const [running, setRunning] = useState(false);
@@ -50,7 +95,7 @@ export default function AnalysisPage({ params }: { params: Promise<{ courseId: s
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error ?? "Analysis failed");
+        throw new Error(toAnalysisErrorMessage(data));
       }
 
       setSummary(data.summary);

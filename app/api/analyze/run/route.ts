@@ -33,8 +33,8 @@ interface StoredResponse {
   answers: Record<string, { textAnswers: string[]; score: number }>;
 }
 
-function sanitizeStudentId(email: string): string {
-  return `student-${email.replace(/[^a-z0-9]/gi, "-").toLowerCase()}`;
+function buildStudentId(index: number): string {
+  return `student-${index + 1}`;
 }
 
 function buildAnalysisInput(
@@ -58,8 +58,8 @@ function buildAnalysisInput(
     storedQuestions.map((q, idx) => [q.questionId, `Q${idx + 1}`]),
   );
 
-  const students: QuizStudentInput[] = responses.map((resp) => {
-    const studentId = sanitizeStudentId(resp.respondentEmail);
+  const students: QuizStudentInput[] = responses.map((resp, idx) => {
+    const studentId = buildStudentId(idx);
     const studentName = resp.respondentEmail.split("@")[0].replace(/[._]/g, " ");
 
     const attemptedQuestionIds: string[] = [];
@@ -165,6 +165,7 @@ export async function POST(req: Request) {
         responseJsonSchema: ModelOutputGenerationSchema,
         temperature: RETRY_TEMPERATURES[0],
         topP: ONLINE_GENERATION_PROFILE.topP,
+        maxOutputTokens: ONLINE_GENERATION_PROFILE.maxOutputTokens,
       },
     });
 
@@ -177,6 +178,12 @@ export async function POST(req: Request) {
         analysisStatus: "error",
       });
 
+      console.warn("Analysis validation failed", {
+        docId,
+        errorClass: validationResult.errorClass,
+        diagnostics: validationResult.diagnostics.slice(0, 3),
+      });
+
       return NextResponse.json({
         error: "Analysis validation failed",
         errorClass: validationResult.errorClass,
@@ -185,7 +192,7 @@ export async function POST(req: Request) {
     }
 
     const emailToStudentId = new Map(
-      responses.map((r) => [sanitizeStudentId(r.respondentEmail), r.respondentEmail]),
+      responses.map((resp, idx) => [buildStudentId(idx), resp.respondentEmail]),
     );
 
     await adminDb.collection("analyses").doc(docId).set({
