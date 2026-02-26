@@ -31,16 +31,8 @@ interface AuthStatusResponse {
 const AUTO_REFRESH_STALE_MS = 10 * 60 * 1000;
 
 const navItems = [
-  {
-    href: routes.dashboard(),
-    label: "Overview",
-    icon: "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z",
-  },
-  {
-    href: routes.courses(),
-    label: "Courses",
-    icon: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253",
-  },
+  { href: routes.dashboard(), label: "Overview" },
+  { href: routes.courses(), label: "Courses" },
 ];
 
 function buildBreadcrumbs(
@@ -164,9 +156,9 @@ export default function DashboardShell({
   const [authStatus, setAuthStatus] = useState<AuthStatusResponse | null>(null);
   const [bootstrap, setBootstrap] = useState<BootstrapStatusResponse | null>(null);
   const [runningBootstrap, setRunningBootstrap] = useState(false);
-  const autoTriggeredRefresh = useRef(false);
-  const userMenuRef = useRef<HTMLDivElement | null>(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
+  const autoTriggeredRefresh = useRef(false);
 
   const integrationsConnected = useMemo(() => {
     if (!authStatus) return false;
@@ -317,39 +309,36 @@ export default function DashboardShell({
 
   return (
     <DashboardBootstrapProvider value={bootstrapContextValue}>
-      <div style={{ display: "flex", minHeight: "100vh" }}>
-        <aside
+      <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+        <header
           style={{
-            width: 230,
-            height: "100vh",
-            padding: "22px 0",
             display: "flex",
-            flexDirection: "column",
+            alignItems: "center",
+            padding: "0 28px",
+            height: 48,
+            background: "#6E4836",
             flexShrink: 0,
-            position: "sticky",
-            top: 0,
-            alignSelf: "flex-start",
-            background: "#FFFFFF",
-            borderRight: "1px solid #E8DFD4",
           }}
         >
-        <Link href={routes.landing()} style={{ textDecoration: "none" }}>
-          <div style={{ padding: "0 24px 18px", borderBottom: "1px solid #F0ECE5" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 24, flex: 1 }}>
+            <Link
+              href={routes.landing()}
+              style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 10 }}
+            >
               <div
                 style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: "50%",
-                  background: "#C17A56",
+                  width: 26,
+                  height: 26,
+                  borderRadius: 6,
+                  background: "rgba(255,255,255,0.15)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                 }}
               >
                 <svg
-                  width="14"
-                  height="14"
+                  width="13"
+                  height="13"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="#FFF"
@@ -361,255 +350,189 @@ export default function DashboardShell({
                   <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
                 </svg>
               </div>
-              <span className="edu-heading" style={{ fontSize: 16, fontWeight: 600, color: "#C17A56" }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "#FFF", letterSpacing: 0.2 }}>
                 EduInsight
               </span>
-            </div>
+            </Link>
+            <nav style={{ display: "flex", alignItems: "center", gap: 2 }}>
+              {navItems.map((item) => {
+                const active =
+                  pathname === item.href ||
+                  (item.href !== routes.dashboard() && pathname.startsWith(item.href));
+                return (
+                  <Link key={item.href} href={item.href} style={{ textDecoration: "none" }}>
+                    <div
+                      style={{
+                        padding: "6px 16px",
+                        borderRadius: 5,
+                        fontSize: 13,
+                        fontWeight: active ? 600 : 400,
+                        color: active ? "#FFF" : "rgba(255,255,255,0.65)",
+                        background: active ? "rgba(255,255,255,0.15)" : "transparent",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      {item.label}
+                    </div>
+                  </Link>
+                );
+              })}
+            </nav>
           </div>
-        </Link>
-
-        <nav style={{ flex: 1, padding: "14px 12px" }}>
-          {navItems.map((item) => {
-            const active =
-              pathname === item.href ||
-              (item.href !== routes.dashboard() && pathname.startsWith(item.href));
-            return (
-              <Link key={item.href} href={item.href} style={{ textDecoration: "none" }}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "10px 12px",
-                    borderRadius: 6,
-                    marginBottom: 3,
-                    background: active ? "rgba(193,122,86,0.08)" : "transparent",
-                    color: active ? "#C17A56" : "#8A7D6F",
-                    fontWeight: active ? 600 : 400,
-                    fontSize: 14,
-                    transition: "all 0.15s",
-                  }}
-                >
-                  <svg
-                    width="17"
-                    height="17"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    viewBox="0 0 24 24"
-                  >
-                    <path d={item.icon} />
-                  </svg>
-                  {item.label}
-                </div>
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div
-          ref={userMenuRef}
-          style={{ padding: "14px 24px", borderTop: "1px solid #F0ECE5", position: "relative" }}
-        >
-          <button
-            type="button"
-            onClick={() => setIsUserMenuOpen((open) => !open)}
-            aria-haspopup="menu"
-            aria-expanded={isUserMenuOpen}
-            style={{
-              width: "100%",
-              border: "none",
-              background: "transparent",
-              padding: 0,
-              textAlign: "left",
-              cursor: "pointer",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div ref={userMenuRef} style={{ position: "relative" }}>
+            <button
+              type="button"
+              onClick={() => setIsUserMenuOpen((open) => !open)}
+              aria-haspopup="menu"
+              aria-expanded={isUserMenuOpen}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                padding: 0,
+              }}
+            >
+              <span style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", fontWeight: 500 }}>
+                {user?.name ?? ""}
+              </span>
               <div
                 style={{
-                  width: 32,
-                  height: 32,
+                  width: 30,
+                  height: 30,
                   borderRadius: "50%",
-                  background: "linear-gradient(135deg, #C17A56, #D4956E)",
+                  background: "#4A9E83",
                   color: "#FFF",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   fontSize: 11,
                   fontWeight: 700,
-                  flexShrink: 0,
                 }}
               >
                 {initials}
               </div>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>{user?.name ?? "…"}</p>
-                <p
-                  style={{
-                    fontSize: 10,
-                    color: "#B5AA9C",
-                    margin: 0,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {user?.email ?? ""}
-                </p>
-              </div>
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#8A7D6F"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+            </button>
+
+            {isUserMenuOpen && (
+              <div
+                role="menu"
                 style={{
-                  transform: isUserMenuOpen ? "rotate(180deg)" : "rotate(0deg)",
-                  transition: "transform 0.15s ease",
+                  position: "absolute",
+                  right: 0,
+                  top: "calc(100% + 8px)",
+                  background: "#FFFFFF",
+                  border: "1px solid #E8DFD4",
+                  borderRadius: 8,
+                  boxShadow: "0 10px 20px rgba(61, 50, 41, 0.12)",
+                  padding: 6,
+                  minWidth: 132,
+                  zIndex: 20,
                 }}
               >
-                <path d="m6 9 6 6 6-6" />
-              </svg>
-            </div>
-          </button>
-
-          {isUserMenuOpen && (
-            <div
-              role="menu"
-              style={{
-                position: "absolute",
-                left: 24,
-                right: 24,
-                bottom: "calc(100% - 4px)",
-                background: "#FFFFFF",
-                border: "1px solid #E8DFD4",
-                borderRadius: 8,
-                boxShadow: "0 10px 20px rgba(15, 23, 42, 0.08)",
-                padding: 6,
-                zIndex: 10,
-              }}
-            >
-              <Link
-                href={routes.settings()}
-                onClick={() => setIsUserMenuOpen(false)}
-                style={{ textDecoration: "none" }}
-              >
-                <div
-                  role="menuitem"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "8px 10px",
-                    borderRadius: 6,
-                    color: "#6D6154",
-                    fontSize: 13,
-                    fontWeight: 500,
-                  }}
+                <Link
+                  href={routes.settings()}
+                  onClick={() => setIsUserMenuOpen(false)}
+                  style={{ textDecoration: "none" }}
                 >
-                  <svg
-                    width="15"
-                    height="15"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    viewBox="0 0 24 24"
+                  <div
+                    role="menuitem"
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 6,
+                      color: "#6D6154",
+                      fontSize: 13,
+                      fontWeight: 500,
+                    }}
                   >
-                    <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" />
-                  </svg>
-                  Settings
-                </div>
-              </Link>
-            </div>
-          )}
-        </div>
-        </aside>
+                    Settings
+                  </div>
+                </Link>
+              </div>
+            )}
+          </div>
+        </header>
 
-        <main style={{ flex: 1, display: "flex", flexDirection: "column", background: "#FAF6F0" }}>
+        <div
+          style={{
+            padding: "10px 28px",
+            borderBottom: "1px solid #F0ECE5",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 13,
+            background: "#FFFFFF",
+          }}
+        >
+          <Suspense fallback={<span style={{ color: "#B5AA9C" }}>Dashboard</span>}>
+            <BreadcrumbTrail pathname={pathname} />
+          </Suspense>
+        </div>
+
+        {authStatus?.authenticated && bootstrap && (
           <div
             style={{
               padding: "10px 28px",
               borderBottom: "1px solid #F0ECE5",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 13,
-              background: "#FFFFFF",
+              background: "#FFFDF9",
             }}
           >
-            <Suspense fallback={<span style={{ color: "#B5AA9C" }}>Dashboard</span>}>
-              <BreadcrumbTrail pathname={pathname} />
-            </Suspense>
+            {!integrationsConnected ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <p style={{ margin: 0, fontSize: 13, color: "#8B6914" }}>
+                  Google access needs reconnect before syncing can continue.
+                </p>
+                <p style={{ margin: 0, fontSize: 12, color: "#B5AA9C" }}>
+                  Open Settings from your profile menu.
+                </p>
+              </div>
+            ) : bootstrap.bootstrapStatus === "syncing" ? (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                <p style={{ margin: 0, fontSize: 13, color: "#8B6914" }}>
+                  Preparing classroom data in background... {bootstrap.stats.courses} course(s), {bootstrap.stats.quizzes} quiz(es).
+                </p>
+                <button className="edu-btn-outline" style={{ fontSize: 12, padding: "4px 10px" }} disabled>
+                  Syncing...
+                </button>
+              </div>
+            ) : bootstrap.bootstrapStatus === "error" ? (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                <p style={{ margin: 0, fontSize: 13, color: "#A63D2E" }}>
+                  {bootstrap.lastBootstrapError || "Data refresh failed. Retry to refresh classroom data."}
+                </p>
+                <button
+                  className="edu-btn-outline"
+                  style={{ fontSize: 12, padding: "4px 10px" }}
+                  onClick={() =>
+                    void runBootstrap(bootstrap.hasInitialSync ? "refresh" : "initial")
+                  }
+                  disabled={runningBootstrap}
+                >
+                  {runningBootstrap ? "Retrying..." : "Retry Sync"}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                <p style={{ margin: 0, fontSize: 13, color: "#8A7D6F" }}>
+                  Data ready - last synced {lastSyncLabel}. {bootstrap.stats.courses} course(s), {bootstrap.stats.quizzes} quiz(es).
+                </p>
+                <button
+                  className="edu-btn-outline"
+                  style={{ fontSize: 12, padding: "4px 10px" }}
+                  onClick={() => void runBootstrap("refresh")}
+                  disabled={runningBootstrap}
+                >
+                  {runningBootstrap ? "Refreshing..." : "Refresh"}
+                </button>
+              </div>
+            )}
           </div>
-          {authStatus?.authenticated && bootstrap && (
-            <div
-              style={{
-                padding: "10px 28px",
-                borderBottom: "1px solid #F0ECE5",
-                background: "#FFFDF9",
-              }}
-            >
-              {!integrationsConnected ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <p style={{ margin: 0, fontSize: 13, color: "#8B6914" }}>
-                    Google access needs reconnect before syncing can continue.
-                  </p>
-                  <p style={{ margin: 0, fontSize: 12, color: "#B5AA9C" }}>
-                    Open Settings from your account menu in the sidebar footer.
-                  </p>
-                </div>
-              ) : bootstrap.bootstrapStatus === "syncing" ? (
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                  <p style={{ margin: 0, fontSize: 13, color: "#8B6914" }}>
-                    Preparing classroom data in background... {bootstrap.stats.courses} course(s), {bootstrap.stats.quizzes} quiz(es).
-                  </p>
-                  <button className="edu-btn-outline" style={{ fontSize: 12, padding: "4px 10px" }} disabled>
-                    Syncing...
-                  </button>
-                </div>
-              ) : bootstrap.bootstrapStatus === "error" ? (
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                  <p style={{ margin: 0, fontSize: 13, color: "#A63D2E" }}>
-                    {bootstrap.lastBootstrapError || "Data refresh failed. Retry to refresh classroom data."}
-                  </p>
-                  <button
-                    className="edu-btn-outline"
-                    style={{ fontSize: 12, padding: "4px 10px" }}
-                    onClick={() =>
-                      void runBootstrap(bootstrap.hasInitialSync ? "refresh" : "initial")
-                    }
-                    disabled={runningBootstrap}
-                  >
-                    {runningBootstrap ? "Retrying..." : "Retry Sync"}
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                  <p style={{ margin: 0, fontSize: 13, color: "#5F738A" }}>
-                    Data ready - last synced {lastSyncLabel}. {bootstrap.stats.courses} course(s), {bootstrap.stats.quizzes} quiz(es).
-                  </p>
-                  <button
-                    className="edu-btn-outline"
-                    style={{ fontSize: 12, padding: "4px 10px" }}
-                    onClick={() => void runBootstrap("refresh")}
-                    disabled={runningBootstrap}
-                  >
-                    {runningBootstrap ? "Refreshing..." : "Refresh"}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-          <div style={{ flex: 1, padding: 28, overflowY: "auto" }}>{children}</div>
+        )}
+
+        <main style={{ flex: 1, padding: 28, background: "#FAF6F0", overflowY: "auto" }}>
+          {children}
         </main>
       </div>
     </DashboardBootstrapProvider>

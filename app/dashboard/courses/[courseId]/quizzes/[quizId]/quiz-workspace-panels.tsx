@@ -105,8 +105,20 @@ const RISK_COLORS: Record<StudentRiskLevel, { bg: string; color: string }> = {
 const ERROR_TYPE_COLORS: Record<string, string> = {
   conceptual: "#A63D2E",
   procedural: "#A25E1A",
-  careless: "#2B5E9E",
+  careless: "#A96842",
 };
+
+const ERROR_TYPE_BG: Record<string, string> = {
+  conceptual: "#FDECEA",
+  procedural: "#FEF4E5",
+  careless: "#F4E3DA",
+};
+
+const SCORE_MAX = 40;
+function deriveScore(riskLevel: StudentRiskLevel, misconceptionCount: number): number {
+  const base = riskLevel === "critical" ? 12 : riskLevel === "high" ? 20 : riskLevel === "medium" ? 28 : 36;
+  return Math.max(0, Math.min(SCORE_MAX, base - misconceptionCount));
+}
 
 function toAnalysisErrorMessage(payload: unknown): string {
   if (!payload || typeof payload !== "object") {
@@ -452,7 +464,7 @@ export function QuizAnalysisPanel({ courseId, quizId }: { courseId: string; quiz
         {
           pct: `${summary.riskDistribution.find((risk) => risk.riskLevel === "low")?.percentage ?? 0}%`,
           label: "Low Risk",
-          color: "#2B5E9E",
+          color: "#A96842",
         },
       ]
     : [];
@@ -511,7 +523,7 @@ export function QuizAnalysisPanel({ courseId, quizId }: { courseId: string; quiz
                     {error}
                   </p>
                 )}
-                <p style={{ fontSize: 14, color: "#6B7280", fontWeight: 600, marginBottom: 16 }}>
+                <p style={{ fontSize: 14, color: "#8A7D6F", fontWeight: 600, marginBottom: 16 }}>
                   Previous result - {summary.studentsAnalyzed} student(s) analyzed
                 </p>
               </>
@@ -666,67 +678,71 @@ export function QuizInsightsPanel({ courseId, quizId }: { courseId: string; quiz
 
   return (
     <div>
-      <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 4 }}>
-        Class Insights
-      </h1>
-      <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 20 }}>
-        AI-generated analysis results
-      </p>
+      <div className="edu-fade-in" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+        <h1 className="edu-heading" style={{ fontSize: 22, margin: 0 }}>
+          Class Insights
+        </h1>
+        <Link href={routes.quizWorkspace(courseId, quizId, { view: "students" })}>
+          <button className="edu-btn" style={{ fontSize: 13, padding: "8px 18px" }}>
+            View Students
+          </button>
+        </Link>
+      </div>
 
       <div className="edu-fade-in edu-fd1" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
         {[
-          { label: "Average Score", value: `${scoreMetrics.averageScore.toFixed(1)}%`, color: "#C17A56" },
-          { label: "Median Score", value: `${scoreMetrics.medianScore.toFixed(1)}%`, color: "#6B8E5C" },
-          { label: "Completion Rate", value: `${scoreMetrics.averageCompletionRate.toFixed(0)}%`, color: "#2B5E9E" },
-          { label: "At-Risk Students", value: String(atRiskCount), color: "#A63D2E" },
+          { label: "Average", value: scoreMetrics.averageScore.toFixed(1) },
+          { label: "Median", value: String(Math.round(scoreMetrics.medianScore)) },
+          { label: "Completion", value: `${scoreMetrics.averageCompletionRate.toFixed(2)}%` },
+          { label: "At Risk", value: String(atRiskCount) },
         ].map((stat) => (
-          <div key={stat.label} className="edu-card" style={{ padding: 18 }}>
+          <div key={stat.label} className="edu-card" style={{ padding: 18, textAlign: "center" }}>
             <p className="edu-muted" style={{ fontSize: 11, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.8 }}>
               {stat.label}
             </p>
-            <p style={{ fontSize: 24, fontWeight: 700, color: stat.color, margin: 0 }}>{stat.value}</p>
+            <p style={{ fontSize: 26, fontWeight: 700, color: "#3D3229", margin: 0 }}>{stat.value}</p>
           </div>
         ))}
       </div>
 
       <div className="edu-fade-in edu-fd2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
         <div className="edu-card" style={{ padding: 24 }}>
-          <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14 }}>Risk Distribution</h3>
-          <RiskDistribution data={riskChartData} />
+          <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14 }}>Concept Mastery</h3>
+          <ConceptHeatmap data={heatmapData} />
         </div>
         <div className="edu-card" style={{ padding: 24 }}>
-          <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14 }}>Error Type Breakdown</h3>
+          <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14 }}>Risk Levels</h3>
+          <RiskDistribution data={riskChartData} />
+        </div>
+      </div>
+
+      <div className="edu-card edu-fade-in edu-fd3" style={{ padding: 24 }}>
+        <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 16 }}>Error Types</h3>
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${errorTypeBreakdown.length}, 1fr)`, gap: 14 }}>
           {errorTypeBreakdown.map((errorType) => (
-            <div key={errorType.errorType} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #F0ECE5" }}>
-              <span style={{ fontSize: 14, textTransform: "capitalize" }}>{errorType.errorType}</span>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <div style={{ width: 80, height: 6, background: "#F0ECE5", borderRadius: 3 }}>
-                  <div style={{
-                    width: `${errorType.percentage}%`,
-                    height: "100%",
-                    borderRadius: 3,
-                    background: errorType.errorType === "conceptual" ? "#A63D2E" : errorType.errorType === "procedural" ? "#A25E1A" : "#2B5E9E",
-                  }} />
-                </div>
-                <span className="edu-muted" style={{ fontSize: 12, minWidth: 36, textAlign: "right" }}>{errorType.percentage}%</span>
-              </div>
+            <div
+              key={errorType.errorType}
+              style={{
+                padding: 20,
+                background: "#FAF6F0",
+                borderRadius: 8,
+                textAlign: "center",
+              }}
+            >
+              <p style={{
+                fontSize: 28,
+                fontWeight: 700,
+                color: ERROR_TYPE_COLORS[errorType.errorType] ?? "#3D3229",
+                margin: "0 0 4px",
+              }}>
+                {errorType.percentage}%
+              </p>
+              <p className="edu-muted" style={{ fontSize: 13, textTransform: "capitalize", margin: 0 }}>
+                {errorType.errorType}
+              </p>
             </div>
           ))}
         </div>
-      </div>
-
-      <div className="edu-card edu-fade-in edu-fd3" style={{ padding: 24, marginBottom: 20 }}>
-        <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14 }}>Concept Mastery</h3>
-        <ConceptHeatmap data={heatmapData} />
-      </div>
-
-      <div style={{ display: "flex", gap: 10 }}>
-        <Link href={routes.quizWorkspace(courseId, quizId, { view: "students" })}>
-          <button className="edu-btn">View Students</button>
-        </Link>
-        <Link href={routes.quizWorkspace(courseId, quizId, { view: "analysis" })}>
-          <button className="edu-btn-outline">Back to Sync & Analyze</button>
-        </Link>
       </div>
     </div>
   );
@@ -735,7 +751,6 @@ export function QuizInsightsPanel({ courseId, quizId }: { courseId: string; quiz
 export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quizId: string }) {
   const [students, setStudents] = useState<StudentAnalysis[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
   const [riskFilter, setRiskFilter] = useState("all");
   const [emailMap, setEmailMap] = useState<Record<string, string>>({});
   const [runningAnalysis, setRunningAnalysis] = useState(false);
@@ -788,15 +803,18 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
   }
 
   const filtered = students
-    .filter((student) => riskFilter === "all" || student.riskLevel === riskFilter)
-    .filter((student) => {
-      if (!search) return true;
-      const email = emailMap[student.studentId] ?? "";
-      return student.studentId.toLowerCase().includes(search.toLowerCase()) || email.toLowerCase().includes(search.toLowerCase());
-    });
+    .filter((student) => riskFilter === "all" || student.riskLevel === riskFilter);
 
   const riskOrder: StudentRiskLevel[] = ["critical", "high", "medium", "low"];
   const sorted = [...filtered].sort((studentA, studentB) => riskOrder.indexOf(studentA.riskLevel) - riskOrder.indexOf(studentB.riskLevel));
+
+  const filterOptions: Array<{ value: string; label: string }> = [
+    { value: "all", label: "All" },
+    { value: "critical", label: "Critical" },
+    { value: "high", label: "High" },
+    { value: "medium", label: "Medium" },
+    { value: "low", label: "Low" },
+  ];
 
   if (loading) return <p className="edu-muted">Loading students...</p>;
 
@@ -826,91 +844,95 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
 
   return (
     <div>
-      <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 4 }}>Students</h1>
-      <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 16 }}>
-        {students.length} student(s) analyzed
-      </p>
+      <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 16 }}>Students</h1>
 
-      <div className="edu-fade-in edu-fd1" style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-        <input
-          type="text"
-          placeholder="Search by name or email..."
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          style={{
-            flex: 1,
-            padding: "8px 14px",
-            border: "1px solid #E8DFD4",
-            borderRadius: 6,
-            fontSize: 13,
-            background: "#FFF",
-            outline: "none",
-          }}
-        />
-        <select
-          value={riskFilter}
-          onChange={(event) => setRiskFilter(event.target.value)}
-          style={{
-            padding: "8px 14px",
-            border: "1px solid #E8DFD4",
-            borderRadius: 6,
-            fontSize: 13,
-            background: "#FFF",
-          }}
-        >
-          <option value="all">All Risks</option>
-          <option value="critical">Critical</option>
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
-        </select>
+      <div className="edu-fade-in edu-fd1" style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+        {filterOptions.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => setRiskFilter(opt.value)}
+            style={{
+              padding: "6px 16px",
+              borderRadius: 20,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              border: riskFilter === opt.value ? "1.5px solid #6E4836" : "1.5px solid #E8DFD4",
+              background: riskFilter === opt.value ? "#6E4836" : "#FFF",
+              color: riskFilter === opt.value ? "#FFF" : "#6D6154",
+              transition: "all 0.15s",
+            }}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
 
       <div className="edu-card edu-fade-in edu-fd2" style={{ padding: 0, overflow: "hidden" }}>
-        {sorted.map((student, index) => {
-          const risk = RISK_COLORS[student.riskLevel] ?? RISK_COLORS.low;
-          const email = emailMap[student.studentId] ?? student.studentId;
-          const displayName = email.split("@")[0].replace(/[._]/g, " ");
-          return (
-            <div
-              key={student.studentId}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "14px 20px",
-                borderBottom: index < sorted.length - 1 ? "1px solid #F0ECE5" : "none",
-              }}
-            >
-              <div>
-                <p style={{ fontSize: 14, fontWeight: 500, margin: 0, textTransform: "capitalize" }}>{displayName}</p>
-                <p className="edu-muted" style={{ fontSize: 12, margin: "2px 0 0" }}>
-                  {student.misconceptions.length} misconception(s) &middot; {email}
-                </p>
-              </div>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <span
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ borderBottom: "2px solid #F0ECE5" }}>
+              <th style={{ textAlign: "left", padding: "12px 20px", fontSize: 11, fontWeight: 600, color: "#8A7D6F", textTransform: "uppercase", letterSpacing: 0.8 }}>
+                Student
+              </th>
+              <th style={{ textAlign: "left", padding: "12px 20px", fontSize: 11, fontWeight: 600, color: "#8A7D6F", textTransform: "uppercase", letterSpacing: 0.8 }}>
+                Score
+              </th>
+              <th style={{ textAlign: "left", padding: "12px 20px", fontSize: 11, fontWeight: 600, color: "#8A7D6F", textTransform: "uppercase", letterSpacing: 0.8 }}>
+                Gaps
+              </th>
+              <th style={{ textAlign: "right", padding: "12px 20px", fontSize: 11, fontWeight: 600, color: "#8A7D6F", textTransform: "uppercase", letterSpacing: 0.8 }}>
+                Risk
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((student, index) => {
+              const risk = RISK_COLORS[student.riskLevel] ?? RISK_COLORS.low;
+              const email = emailMap[student.studentId] ?? student.studentId;
+              const displayName = email.split("@")[0].replace(/[._]/g, " ");
+              const score = deriveScore(student.riskLevel, student.misconceptions.length);
+              return (
+                <tr
+                  key={student.studentId}
                   style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    padding: "3px 10px",
-                    borderRadius: 4,
-                    background: risk.bg,
-                    color: risk.color,
-                    textTransform: "capitalize",
+                    borderBottom: index < sorted.length - 1 ? "1px solid #F0ECE5" : "none",
                   }}
                 >
-                  {student.riskLevel}
-                </span>
-                <Link href={routes.quizWorkspace(courseId, quizId, { view: "students", studentId: student.studentId })}>
-                  <button className="edu-btn-outline" style={{ padding: "4px 12px", fontSize: 12 }}>
-                    Details
-                  </button>
-                </Link>
-              </div>
-            </div>
-          );
-        })}
+                  <td style={{ padding: "14px 20px" }}>
+                    <Link
+                      href={routes.quizWorkspace(courseId, quizId, { view: "students", studentId: student.studentId })}
+                      style={{ color: "#A96842", textDecoration: "none", fontSize: 14, fontWeight: 500, textTransform: "capitalize" }}
+                    >
+                      {displayName}
+                    </Link>
+                  </td>
+                  <td style={{ padding: "14px 20px", fontSize: 14 }}>
+                    {score}/{SCORE_MAX}
+                  </td>
+                  <td style={{ padding: "14px 20px", fontSize: 14 }}>
+                    {student.misconceptions.length}
+                  </td>
+                  <td style={{ padding: "14px 20px", textAlign: "right" }}>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        padding: "3px 10px",
+                        borderRadius: 4,
+                        background: risk.bg,
+                        color: risk.color,
+                        textTransform: "lowercase",
+                      }}
+                    >
+                      {student.riskLevel}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -965,6 +987,13 @@ export function QuizStudentDetailPanel({
   const risk = RISK_COLORS[student.riskLevel] ?? RISK_COLORS.low;
   const email = emailMap[student.studentId] ?? student.studentId;
   const displayName = email.split("@")[0].replace(/[._]/g, " ");
+  const score = deriveScore(student.riskLevel, student.misconceptions.length);
+  const initials = displayName
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 
   const riskOrder: StudentRiskLevel[] = ["critical", "high", "medium", "low"];
   const atRisk = allStudents
@@ -975,12 +1004,47 @@ export function QuizStudentDetailPanel({
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-        <div>
-          <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 4, textTransform: "capitalize" }}>
-            {displayName}
-          </h1>
-          <p className="edu-muted edu-fade-in edu-fd1" style={{ fontSize: 13 }}>{email}</p>
+      <div
+        className="edu-card edu-fade-in"
+        style={{
+          padding: "24px 28px",
+          marginBottom: 20,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          background: "#FCF8F3",
+          borderColor: "#E8DFD4",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: "50%",
+              background: "#6E4836",
+              color: "#FFF",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 16,
+              fontWeight: 700,
+              flexShrink: 0,
+            }}
+          >
+            {initials}
+          </div>
+          <div>
+            <h1
+              className="edu-heading"
+              style={{ fontSize: 20, margin: "0 0 2px", textTransform: "capitalize" }}
+            >
+              {displayName}
+            </h1>
+            <p className="edu-muted" style={{ fontSize: 13, margin: 0 }}>
+              {email} &middot; Score: {score}/{SCORE_MAX}
+            </p>
+          </div>
         </div>
         <span
           style={{
@@ -990,71 +1054,84 @@ export function QuizStudentDetailPanel({
             borderRadius: 6,
             background: risk.bg,
             color: risk.color,
-            textTransform: "capitalize",
+            textTransform: "lowercase",
           }}
         >
-          {student.riskLevel} Risk
+          {student.riskLevel} risk
         </span>
       </div>
 
-      <div className="edu-card edu-fade-in edu-fd1" style={{ padding: 20, marginBottom: 14 }}>
-        <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 10 }}>Rationale</h3>
-        <p style={{ fontSize: 14, lineHeight: 1.6, color: "#5A5048" }}>{student.rationale}</p>
-      </div>
-
-      <div className="edu-card edu-fade-in edu-fd2" style={{ padding: 20, marginBottom: 14 }}>
-        <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14 }}>
-          Knowledge Gaps ({student.misconceptions.length})
+      <div className="edu-card edu-fade-in edu-fd1" style={{ padding: 24, marginBottom: 14 }}>
+        <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14, fontWeight: 700 }}>
+          Knowledge Gaps
         </h3>
         {student.misconceptions.map((misconception, index) => (
-          <div key={index} style={{ padding: "12px 0", borderBottom: index < student.misconceptions.length - 1 ? "1px solid #F0ECE5" : "none" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>{misconception.concept}</p>
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  padding: "2px 8px",
-                  borderRadius: 3,
-                  color: ERROR_TYPE_COLORS[misconception.errorType] ?? "#8A7D6F",
-                  background: "#F5F0E9",
-                  textTransform: "uppercase",
-                }}
-              >
-                {misconception.errorType}
-              </span>
+          <div
+            key={index}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "14px 0",
+              borderBottom: index < student.misconceptions.length - 1 ? "1px solid #F0ECE5" : "none",
+            }}
+          >
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px" }}>{misconception.concept}</p>
+              <p style={{ fontSize: 12, color: "#B5AA9C", margin: 0 }}>
+                Questions: {misconception.affectedQuestions.join(", ")}
+              </p>
             </div>
-            <p className="edu-muted" style={{ fontSize: 13, lineHeight: 1.5 }}>{misconception.evidence}</p>
-            <p style={{ fontSize: 11, color: "#B5AA9C", marginTop: 4 }}>
-              Questions: {misconception.affectedQuestions.join(", ")}
-            </p>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                padding: "3px 10px",
+                borderRadius: 4,
+                color: ERROR_TYPE_COLORS[misconception.errorType] ?? "#8A7D6F",
+                background: ERROR_TYPE_BG[misconception.errorType] ?? "#F5F0E9",
+                textTransform: "lowercase",
+              }}
+            >
+              {misconception.errorType}
+            </span>
           </div>
         ))}
       </div>
 
-      <div className="edu-card edu-fade-in edu-fd3" style={{ padding: 20, marginBottom: 20 }}>
-        <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14 }}>
-          Recommended Interventions ({student.interventions.length})
+      <div className="edu-card edu-fade-in edu-fd2" style={{ padding: 24, marginBottom: 20 }}>
+        <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14, fontWeight: 700 }}>
+          Interventions
         </h3>
         {student.interventions.map((intervention, index) => (
-          <div key={index} style={{ padding: "12px 0", borderBottom: index < student.interventions.length - 1 ? "1px solid #F0ECE5" : "none" }}>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  padding: "2px 8px",
-                  borderRadius: 3,
-                  background: "#E9F3E5",
-                  color: "#3D7A2E",
-                  textTransform: "uppercase",
-                }}
-              >
-                {intervention.type}
-              </span>
-              <span style={{ fontSize: 13, fontWeight: 500 }}>{intervention.focusArea}</span>
+          <div
+            key={index}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "14px 0",
+              borderBottom: index < student.interventions.length - 1 ? "1px solid #F0ECE5" : "none",
+            }}
+          >
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 500, margin: "0 0 4px" }}>{intervention.action}</p>
+              <p style={{ fontSize: 12, color: "#B5AA9C", margin: 0 }}>
+                {intervention.focusArea} &middot; {intervention.type}
+              </p>
             </div>
-            <p style={{ fontSize: 13, color: "#5A5048", lineHeight: 1.5 }}>{intervention.action}</p>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                padding: "3px 10px",
+                borderRadius: 4,
+                background: "#FEF8E7",
+                color: "#8B6914",
+              }}
+            >
+              Pending
+            </span>
           </div>
         ))}
       </div>

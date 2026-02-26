@@ -21,7 +21,7 @@ interface TrendChartProps {
 
 export default function TrendChart({
   data,
-  lineColor = "#4A90D9",
+  lineColor = "#C17A56",
   gridColor = "#e5e7eb",
   height = 280,
 }: TrendChartProps) {

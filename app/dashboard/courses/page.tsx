@@ -74,19 +74,9 @@ export default function CoursesPage() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
-        <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22 }}>
-          Courses
-        </h1>
-        <button
-          className="edu-btn-outline"
-          style={{ fontSize: 12, padding: "6px 14px" }}
-          onClick={syncCourses}
-          disabled={runningBootstrap}
-        >
-          {runningBootstrap ? "Refreshing..." : "Refresh from Classroom"}
-        </button>
-      </div>
+      <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 4 }}>
+        Courses
+      </h1>
       <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 20 }}>
         {loading
           ? "Loading..."
@@ -99,48 +89,55 @@ export default function CoursesPage() {
                 : "No courses available yet."}
       </p>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div
+        className="edu-fade-in edu-fd1"
+        style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}
+      >
         {courses.map((course) => (
           <Link key={course.id} href={routes.course(course.id)} style={{ textDecoration: "none" }}>
-            <div className="edu-card edu-fade-in" style={{ padding: 20, cursor: "pointer", transition: "box-shadow 0.15s" }}>
+            <div
+              className="edu-card"
+              style={{
+                padding: "20px 20px 20px 24px",
+                borderLeft: "4px solid #6E4836",
+                cursor: "pointer",
+                height: "100%",
+              }}
+            >
+              <p style={{ fontSize: 15, fontWeight: 700, margin: "0 0 4px" }}>{course.name}</p>
+              {course.section && (
+                <p className="edu-muted" style={{ fontSize: 13, margin: "0 0 14px" }}>{course.section}</p>
+              )}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <p style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>{course.name}</p>
-                  {course.section && (
-                    <p className="edu-muted" style={{ fontSize: 13, margin: "4px 0 0" }}>{course.section}</p>
-                  )}
-                  <p className="edu-muted" style={{ fontSize: 12, margin: "6px 0 0" }}>
-                    {course.studentCount} students &middot;{" "}
-                    {course.lastSynced
-                      ? `Synced ${new Date(course.lastSynced).toLocaleDateString()}`
-                      : "Not synced"}
-                  </p>
-                </div>
+                <span style={{ fontSize: 13, color: "#A96842", fontWeight: 500 }}>
+                  {course.studentCount} students
+                </span>
                 <span className={`edu-badge ${course.lastSynced ? "edu-badge-low" : "edu-badge-high"}`}>
-                  {course.lastSynced ? "Synced" : "Not Synced"}
+                  {course.lastSynced ? "Synced" : "Pending"}
                 </span>
               </div>
             </div>
           </Link>
         ))}
-        {!loading && courses.length === 0 && (
-          <div className="edu-card" style={{ padding: 32, textAlign: "center" }}>
-            <p className="edu-muted" style={{ marginBottom: 14 }}>
-              {bootstrap?.bootstrapStatus === "syncing" || runningBootstrap
-                ? "Preparing your courses. This usually takes less than a minute."
-                : "No courses found. Refresh from Classroom to get started."}
-            </p>
-            <button className="edu-btn" onClick={syncCourses} disabled={runningBootstrap}>
-              {runningBootstrap ? "Refreshing..." : "Retry Sync"}
-            </button>
-            {bootstrap?.lastBootstrapError && (
-              <p style={{ fontSize: 12, color: "#A63D2E", marginTop: 10 }}>
-                {bootstrap.lastBootstrapError}
-              </p>
-            )}
-          </div>
-        )}
       </div>
+
+      {!loading && courses.length === 0 && (
+        <div className="edu-card" style={{ padding: 32, textAlign: "center" }}>
+          <p className="edu-muted" style={{ marginBottom: 14 }}>
+            {bootstrap?.bootstrapStatus === "syncing" || runningBootstrap
+              ? "Preparing your courses. This usually takes less than a minute."
+              : "No courses found. Refresh from Classroom to get started."}
+          </p>
+          <button className="edu-btn" onClick={syncCourses} disabled={runningBootstrap}>
+            {runningBootstrap ? "Refreshing..." : "Retry Sync"}
+          </button>
+          {bootstrap?.lastBootstrapError && (
+            <p style={{ fontSize: 12, color: "#A63D2E", marginTop: 10 }}>
+              {bootstrap.lastBootstrapError}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
