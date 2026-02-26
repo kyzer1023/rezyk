@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/requireAuth";
 import { adminDb } from "@/lib/firebaseAdmin";
-import { GoogleGenAI } from "@google/genai";
+import { callGemini, ONLINE_MODEL_ID } from "@/lib/gemini";
 import { buildQuizAnalysisPrompt } from "@/lib/analysis/quiz-analysis-prompt";
 import {
   ModelOutputGenerationSchema,
-  ONLINE_GENERATION_PROFILE,
-  ONLINE_MODEL_ID,
-  RETRY_TEMPERATURES,
   type QuizAnalysisInput,
   type QuizQuestionInput,
   type QuizStudentInput,
@@ -95,21 +92,6 @@ function buildAnalysisInput(
   return { quizId, quizTitle: quizTitle, questions, students };
 }
 
-function resolveApiKey(): string {
-  const keys = [
-    process.env.GEMINI_API_KEY,
-    process.env.GEMINI_API_KEY2,
-    process.env.GEMINI_API_KEY3,
-    process.env.GEMINI_API_KEY4,
-    process.env.GEMINI_API_KEY5,
-  ].filter((k): k is string => !!k && k.length > 0);
-
-  if (keys.length === 0) {
-    throw new Error("No GEMINI_API_KEY configured");
-  }
-
-  return keys[Math.floor(Math.random() * keys.length)];
-}
 
 export async function POST(req: Request) {
   try {
@@ -154,21 +136,7 @@ export async function POST(req: Request) {
 
     const analysisInput = buildAnalysisInput(docId, quizTitle, storedQuestions, responses);
     const prompt = buildQuizAnalysisPrompt(analysisInput);
-    const apiKey = resolveApiKey();
-    const client = new GoogleGenAI({ apiKey });
-
-    const geminiResponse = await client.models.generateContent({
-      model: ONLINE_MODEL_ID,
-      contents: prompt,
-      config: {
-        responseMimeType: ONLINE_GENERATION_PROFILE.responseMimeType,
-        responseJsonSchema: ModelOutputGenerationSchema,
-        temperature: RETRY_TEMPERATURES[0],
-        topP: ONLINE_GENERATION_PROFILE.topP,
-      },
-    });
-
-    const rawText = typeof geminiResponse.text === "string" ? geminiResponse.text : String(geminiResponse.text ?? "");
+    const rawText = await callGemini({ prompt, responseSchema: ModelOutputGenerationSchema });
 
     const validationResult = validateQuizAnalysisResponse(rawText, analysisInput);
 
