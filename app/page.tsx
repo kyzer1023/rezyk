@@ -4,65 +4,68 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 /* ═══════════════════════════════════════════════════════════════════
-   RENDITION 2 — Geometric / Art Deco
-   Direction: Structured grids, angular card borders, bold geometric
-   accents, slab-serif headlines, copper/cream/charcoal palette,
-   decorative border patterns, staggered entrance animations.
+   RENDITION 3 — Organic / Natural
+   Direction: Flowing blob shapes, soft sage/terracotta earth gradients,
+   fully rounded corners, gentle breathing animations, layered depth,
+   handwritten-style accent font vibe, nature-inspired warm tones.
    ═══════════════════════════════════════════════════════════════════ */
 
-function useVisible(ref: React.RefObject<HTMLElement | null>, t = 0.12) {
+function useVis(ref: React.RefObject<HTMLElement | null>) {
   const [v, setV] = useState(false);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const o = new IntersectionObserver(([e]) => { if (e.isIntersecting) setV(true); }, { threshold: t });
+    const o = new IntersectionObserver(([e]) => { if (e.isIntersecting) setV(true); }, { threshold: 0.1 });
     o.observe(el);
     return () => o.disconnect();
-  }, [ref, t]);
+  }, [ref]);
   return v;
 }
 
-function Reveal({ children, delay = 0, style = {} }: { children: React.ReactNode; delay?: number; style?: React.CSSProperties }) {
+function Fade({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
   const ref = useRef<HTMLDivElement>(null);
-  const v = useVisible(ref);
+  const v = useVis(ref);
   return (
-    <div ref={ref} style={{ opacity: v ? 1 : 0, transform: v ? "translateY(0) scale(1)" : "translateY(30px) scale(0.97)", transition: `all 0.65s cubic-bezier(.22,1,.36,1) ${delay}s`, ...style }}>
+    <div ref={ref} style={{ opacity: v ? 1 : 0, transform: v ? "translateY(0)" : "translateY(28px)", transition: `all 0.8s cubic-bezier(.25,.46,.45,.94) ${delay}s` }}>
       {children}
     </div>
   );
 }
 
-function DiamondIcon({ children, bg = "#C17A56" }: { children: React.ReactNode; bg?: string }) {
+function Blob({ color, size, top, left, blur = 120 }: { color: string; size: number; top: string; left: string; blur?: number }) {
   return (
-    <div style={{ width: 44, height: 44, background: bg, transform: "rotate(45deg)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
-      <span style={{ transform: "rotate(-45deg)", fontSize: 18, color: "#fff" }}>{children}</span>
-    </div>
+    <div style={{
+      position: "absolute", top, left, width: size, height: size,
+      borderRadius: "50%", background: color, filter: `blur(${blur}px)`,
+      pointerEvents: "none", opacity: 0.35,
+    }} />
   );
 }
 
-function DashboardMock() {
+function MockCard() {
   return (
-    <div style={{ background: "#2a2420", borderRadius: 2, border: "2px solid #c17a56", overflow: "hidden", boxShadow: "12px 12px 0 rgba(193,122,86,0.15)" }}>
-      <div style={{ background: "#c17a56", padding: "6px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontFamily: "'Courier New', monospace", fontSize: 11, fontWeight: 700, color: "#fff", letterSpacing: 2 }}>EDUINSIGHT</span>
-        <span style={{ fontSize: 9, color: "rgba(255,255,255,0.6)" }}>DASHBOARD</span>
-      </div>
-      <div style={{ padding: 16, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+    <div style={{ background: "rgba(255,255,255,0.85)", backdropFilter: "blur(12px)", borderRadius: 24, padding: 28, border: "1px solid rgba(193,122,86,0.12)", boxShadow: "0 24px 48px rgba(61,50,41,0.08)", maxWidth: 480, width: "100%" }}>
+      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
         {[
-          { v: "6", l: "AT RISK", c: "#A63D2E" },
-          { v: "68%", l: "AVG SCORE", c: "#D4956E" },
-          { v: "92%", l: "COVERAGE", c: "#6B8E5C" },
+          { label: "Students", value: "32", bg: "linear-gradient(135deg, #e9f3e5, #d4e8cc)" },
+          { label: "At Risk", value: "6", bg: "linear-gradient(135deg, #fdecea, #f8d4cc)" },
+          { label: "Avg Score", value: "72%", bg: "linear-gradient(135deg, #fef8e7, #fceec8)" },
         ].map((s) => (
-          <div key={s.l} style={{ textAlign: "center", padding: 10, border: "1px solid rgba(193,122,86,0.25)" }}>
-            <div style={{ fontFamily: "'Courier New', monospace", fontSize: 20, fontWeight: 700, color: s.c }}>{s.v}</div>
-            <div style={{ fontSize: 8, color: "rgba(255,255,255,0.4)", letterSpacing: 1.5, marginTop: 4 }}>{s.l}</div>
+          <div key={s.label} style={{ flex: 1, padding: "14px 12px", borderRadius: 16, background: s.bg, textAlign: "center" }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "#3d3229" }}>{s.value}</div>
+            <div style={{ fontSize: 10, color: "#8a7d6f", marginTop: 2 }}>{s.label}</div>
           </div>
         ))}
       </div>
-      <div style={{ padding: "0 16px 14px" }}>
-        {["Alex M. — CRITICAL", "Sarah J. — MEDIUM", "David L. — LOW"].map((s, i) => (
-          <div key={s} style={{ padding: "6px 0", borderBottom: i < 2 ? "1px solid rgba(193,122,86,0.15)" : "none", fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "'Courier New', monospace" }}>
-            {s}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {[
+          { name: "Alex M.", risk: "Critical", c: "#A63D2E", bg: "#fdecea" },
+          { name: "Sarah J.", risk: "At Risk", c: "#8B6914", bg: "#fef8e7" },
+          { name: "David L.", risk: "On Track", c: "#3D7A2E", bg: "#e9f3e5" },
+        ].map((s) => (
+          <div key={s.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", borderRadius: 12, background: "rgba(250,246,240,0.6)" }}>
+            <span style={{ fontSize: 13, color: "#3d3229", fontWeight: 500 }}>{s.name}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: s.bg, color: s.c }}>{s.risk}</span>
           </div>
         ))}
       </div>
@@ -91,115 +94,109 @@ export default function LandingPage() {
 
   if (checking) {
     return (
-      <div style={{ minHeight: "100vh", background: "#FAF6F0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ width: 24, height: 24, border: "3px solid #e8dfd4", borderTopColor: "#C17A56", borderRadius: "50%", animation: "spin .7s linear infinite" }} />
+      <div style={{ minHeight: "100vh", background: "#f4f0e8", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: 28, height: 28, border: "3px solid #e0d6ca", borderTopColor: "#6B8E5C", borderRadius: "50%", animation: "spin .8s linear infinite" }} />
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       </div>
     );
   }
 
   return (
-    <div style={{ background: "#FAF6F0", minHeight: "100vh" }}>
+    <div style={{ background: "#f4f0e8", minHeight: "100vh", overflowX: "hidden" }}>
       <style>{`
         @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes decoSlide{from{opacity:0;transform:translateX(-40px)}to{opacity:1;transform:translateX(0)}}
-        @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(193,122,86,0.3)}50%{box-shadow:0 0 0 12px rgba(193,122,86,0)}}
+        @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}
+        @keyframes gentleDrift{0%,100%{transform:translate(0,0)}50%{transform:translate(-8px,-12px)}}
       `}</style>
 
       {/* ─── HERO ─── */}
-      <section style={{ background: "linear-gradient(175deg, #3d3229 60%, #C17A56 100%)", position: "relative", overflow: "hidden" }}>
-        {/* Decorative grid lines */}
-        <div style={{ position: "absolute", inset: 0, opacity: 0.04, backgroundImage: "repeating-linear-gradient(0deg, #fff 0px, #fff 1px, transparent 1px, transparent 60px), repeating-linear-gradient(90deg, #fff 0px, #fff 1px, transparent 1px, transparent 60px)", pointerEvents: "none" }} />
-        
-        <nav style={{ padding: "20px 48px", display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: 1200, margin: "0 auto", position: "relative", zIndex: 2 }}>
+      <section style={{ position: "relative", overflow: "hidden", minHeight: "92vh", display: "flex", flexDirection: "column" }}>
+        <Blob color="#C17A56" size={500} top="-10%" left="65%" blur={150} />
+        <Blob color="#6B8E5C" size={400} top="30%" left="-8%" blur={140} />
+        <Blob color="#D4956E" size={300} top="60%" left="50%" blur={130} />
+
+        <nav style={{ padding: "24px 48px", display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: 1200, margin: "0 auto", width: "100%", position: "relative", zIndex: 2 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 28, height: 28, background: "#C17A56", transform: "rotate(45deg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ transform: "rotate(-45deg)" }}>
+            <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #C17A56, #6B8E5C)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
               </svg>
             </div>
-            <span style={{ fontFamily: "'Courier New', monospace", fontSize: 14, fontWeight: 700, color: "#D4956E", letterSpacing: 4 }}>EDUINSIGHT</span>
+            <span style={{ fontSize: 17, fontWeight: 700, color: "#3d3229" }}>EduInsight AI</span>
           </div>
-          <a href="/api/auth/login" style={{ textDecoration: "none", border: "2px solid #C17A56", color: "#D4956E", padding: "8px 20px", fontSize: 12, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase" }}>
-            Sign In →
+          <a href="/api/auth/login" style={{ textDecoration: "none", background: "linear-gradient(135deg, #C17A56, #a96842)", color: "#fff", padding: "10px 24px", borderRadius: 24, fontSize: 13, fontWeight: 600 }}>
+            Sign in with Google
           </a>
         </nav>
 
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "60px 48px 80px", display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 60, alignItems: "center", position: "relative", zIndex: 2 }}>
-          <div style={{ animation: "decoSlide 0.8s ease both" }}>
-            <div style={{ width: 48, height: 3, background: "#C17A56", marginBottom: 24 }} />
-            <h1 style={{ fontFamily: "Georgia, serif", fontSize: 56, lineHeight: 1.08, fontWeight: 700, color: "#FAF6F0", margin: "0 0 20px", letterSpacing: -1.5 }}>
-              Decode Every<br />Misconception.
+        <div style={{ flex: 1, maxWidth: 1200, margin: "0 auto", padding: "40px 48px 80px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center", position: "relative", zIndex: 2, width: "100%" }}>
+          <div>
+            <span style={{ display: "inline-block", padding: "6px 16px", borderRadius: 20, background: "rgba(107,142,92,0.12)", color: "#4a7340", fontSize: 12, fontWeight: 600, marginBottom: 20 }}>Powered by Gemini AI</span>
+            <h1 style={{ fontFamily: "Georgia, serif", fontSize: 50, lineHeight: 1.14, fontWeight: 700, color: "#3d3229", margin: "0 0 20px" }}>
+              Nurture every learner with intelligent insights
             </h1>
-            <p style={{ fontSize: 16, lineHeight: 1.75, color: "rgba(250,246,240,0.55)", maxWidth: 460, marginBottom: 36 }}>
-              AI-powered quiz analytics that reveal why students get answers wrong — not just that they did. Built on Google Classroom + Gemini.
+            <p style={{ fontSize: 17, lineHeight: 1.75, color: "#7a7064", maxWidth: 440, marginBottom: 32 }}>
+              Transform quiz results into deep understanding of each student&apos;s learning journey.
+              Discover misconceptions, identify at-risk learners, and grow your teaching impact.
             </p>
-            <a href="/api/auth/login" style={{ textDecoration: "none", background: "#C17A56", color: "#fff", padding: "16px 32px", fontSize: 14, fontWeight: 700, letterSpacing: 1, display: "inline-block", transition: "all .2s" }}>
-              GET STARTED FREE
+            <a href="/api/auth/login" style={{ textDecoration: "none", background: "linear-gradient(135deg, #6B8E5C, #4a7340)", color: "#fff", padding: "16px 32px", borderRadius: 28, fontSize: 15, fontWeight: 600, display: "inline-block", boxShadow: "0 8px 24px rgba(107,142,92,0.25)" }}>
+              Start Your Journey →
             </a>
-            <p style={{ fontSize: 10, color: "rgba(250,246,240,0.3)", marginTop: 14, letterSpacing: 1 }}>SECURE · READ-ONLY · SDG 4 ALIGNED</p>
           </div>
-          <div style={{ animation: "decoSlide 1s ease both 0.3s", opacity: 0 }}>
-            <DashboardMock />
+          <div style={{ display: "flex", justifyContent: "center", animation: "gentleDrift 6s ease-in-out infinite" }}>
+            <MockCard />
           </div>
         </div>
       </section>
 
       {/* ─── CAPABILITIES ─── */}
       <section style={{ maxWidth: 1200, margin: "0 auto", padding: "80px 48px", textAlign: "center" }}>
-        <Reveal>
-          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: 4, color: "#C17A56", marginBottom: 8 }}>SYSTEM CAPABILITIES</p>
-          <h2 style={{ fontFamily: "Georgia, serif", fontSize: 38, color: "#3d3229", margin: "0 0 12px" }}>Pedagogical Intelligence</h2>
-          <p style={{ fontSize: 14, color: "#8a7d6f", maxWidth: 480, margin: "0 auto 48px" }}>Automated insights derived from psychometric analysis.</p>
-        </Reveal>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 2, background: "#e8dfd4" }}>
+        <Fade>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2.5, color: "#6B8E5C", textTransform: "uppercase" }}>System Capabilities</span>
+          <h2 style={{ fontFamily: "Georgia, serif", fontSize: 38, color: "#3d3229", margin: "8px 0 12px" }}>Pedagogical Intelligence</h2>
+          <p style={{ fontSize: 15, color: "#8a7d6f", maxWidth: 480, margin: "0 auto 48px" }}>Automated insights derived from psychometric analysis.</p>
+        </Fade>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
           {[
-            { icon: "α", title: "Misconception Decoding", desc: "Our engine analyzes distractor choices to pinpoint exactly why a student failed." },
-            { icon: "β", title: "Risk Stratification", desc: "Predictive modeling identifies students at risk before their grades reflect it." },
-            { icon: "γ", title: "Curriculum Heatmaps", desc: "Visualize concept mastery across your entire district. Spot gaps instantaneously." },
+            { emoji: "🔬", title: "Misconception Decoding", desc: "Our engine analyzes distractor choices to pinpoint exactly why a student failed.", bg: "linear-gradient(135deg, #fef8e7, #fcf0d8)" },
+            { emoji: "📊", title: "Risk Stratification", desc: "Predictive modeling identifies students at risk of falling behind before grades reflect it.", bg: "linear-gradient(135deg, #fdecea, #f8d4cc)" },
+            { emoji: "🗺️", title: "Curriculum Heatmaps", desc: "Visualize concept mastery across your entire class. Spot systemic gaps instantaneously.", bg: "linear-gradient(135deg, #e9f3e5, #d8ebcf)" },
           ].map((c, i) => (
-            <Reveal key={c.icon} delay={i * 0.1}>
-              <div style={{ background: "#FAF6F0", padding: "40px 28px", textAlign: "left", height: "100%" }}>
-                <DiamondIcon>{c.icon}</DiamondIcon>
-                <h3 style={{ fontFamily: "Georgia, serif", fontSize: 20, color: "#3d3229", margin: "0 0 10px" }}>{c.title}</h3>
-                <p style={{ fontSize: 13, lineHeight: 1.65, color: "#8a7d6f" }}>{c.desc}</p>
+            <Fade key={c.title} delay={i * 0.12}>
+              <div style={{ background: c.bg, borderRadius: 20, padding: "36px 28px", textAlign: "left", height: "100%", border: "1px solid rgba(0,0,0,0.04)" }}>
+                <span style={{ fontSize: 28, display: "block", marginBottom: 16 }}>{c.emoji}</span>
+                <h3 style={{ fontSize: 19, color: "#3d3229", margin: "0 0 10px", fontWeight: 700 }}>{c.title}</h3>
+                <p style={{ fontSize: 14, lineHeight: 1.65, color: "#7a7064", margin: 0 }}>{c.desc}</p>
               </div>
-            </Reveal>
+            </Fade>
           ))}
         </div>
       </section>
 
-      {/* ─── BENTO FEATURES ─── */}
-      <section style={{ background: "#fff", borderTop: "2px solid #3d3229", borderBottom: "2px solid #3d3229" }}>
+      {/* ─── FROM DATA TO PEDAGOGY ─── */}
+      <section style={{ background: "rgba(255,255,255,0.5)", borderRadius: "40px 40px 0 0", marginTop: -20 }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: "80px 48px" }}>
-          <Reveal>
-            <h2 style={{ fontFamily: "Georgia, serif", fontSize: 38, color: "#3d3229", textAlign: "center", margin: "0 0 48px" }}>From Data to Pedagogy</h2>
-          </Reveal>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, background: "#3d3229" }}>
+          <Fade>
+            <div style={{ textAlign: "center", marginBottom: 48 }}>
+              <h2 style={{ fontFamily: "Georgia, serif", fontSize: 38, color: "#3d3229", margin: "0 0 12px" }}>From Data to Pedagogy</h2>
+              <p style={{ fontSize: 15, color: "#8a7d6f", maxWidth: 500, margin: "0 auto" }}>It understands why a student got the answer wrong.</p>
+            </div>
+          </Fade>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             {[
-              { title: "Misconception Analysis", desc: "AI identifies patterns in incorrect answers to reveal root causes.", detail: "Q3 — 42% selected \"B\" → confusing area with perimeter" },
-              { title: "Risk Stratification", desc: "Instantly see who is falling behind.", detail: "Alex M. ▸ CRITICAL · Sarah J. ▸ AT RISK · David L. ▸ ON TRACK" },
-              { title: "Concept Heatmap", desc: "Visualize performance across topic clusters.", detail: null },
-              { title: "Intervention Plans", desc: "Generated lesson plans and grouping strategies.", detail: "\"Group A needs a refresher on quadratic factoring.\"" },
+              { title: "Misconception Analysis", desc: "AI identifies patterns in incorrect answers to reveal root causes.", icon: "⊙", detail: <div style={{ background: "#fcf8f3", borderRadius: 12, padding: "12px 14px", display: "flex", gap: 10, alignItems: "center", marginTop: 16 }}><span style={{ background: "#C17A56", color: "#fff", fontSize: 10, fontWeight: 800, padding: "4px 8px", borderRadius: 8 }}>Q3</span><div><p style={{ fontSize: 12, fontWeight: 600, color: "#3d3229", margin: 0 }}>42% selected &quot;B&quot;</p><p style={{ fontSize: 11, color: "#b5aa9c", margin: "2px 0 0" }}>Confusing area with perimeter</p></div></div> },
+              { title: "Student Risk Stratification", desc: "Instantly see who is falling behind before the test.", icon: "⟁", detail: <div style={{ marginTop: 16, display: "flex", flexDirection: "column" as const, gap: 6 }}>{[{n:"Alex M.",b:"CRITICAL",bg:"#fdecea",c:"#A63D2E"},{n:"Sarah J.",b:"AT RISK",bg:"#fef8e7",c:"#8B6914"},{n:"David L.",b:"ON TRACK",bg:"#e9f3e5",c:"#3D7A2E"}].map(s=><div key={s.n} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #f0ece5"}}><span style={{fontSize:13,color:"#3d3229"}}>{s.n}</span><span style={{fontSize:9,fontWeight:700,padding:"3px 10px",borderRadius:12,background:s.bg,color:s.c}}>{s.b}</span></div>)}</div> },
+              { title: "Concept Heatmap", desc: "Visualize class performance across topic clusters.", icon: "▦", detail: <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4, marginTop: 16 }}>{["#7a9e5c","#8aab64","#6b8e4e","#c9a96e","#c47a4a","#7a9e5c","#8aab64","#a8c27a","#c47a4a","#9ab86c"].map((c,j)=><div key={j} style={{aspectRatio:"1",borderRadius:8,background:c,opacity:0.85}} />)}</div> },
+              { title: "Intervention Recommendations", desc: "Generated lesson plans to address gaps.", icon: "✎", detail: <div style={{ background: "#fcf8f3", borderLeft: "3px solid #6B8E5C", borderRadius: "0 12px 12px 0", padding: "12px 14px", marginTop: 16 }}><p style={{ fontSize: 12, fontStyle: "italic", color: "#5a5048", margin: 0, lineHeight: 1.6 }}>&quot;Group A needs a refresher on quadratic factoring. Try the Tile Method activity.&quot;</p></div> },
             ].map((f, i) => (
-              <Reveal key={f.title} delay={i * 0.1}>
-                <div style={{ background: "#FAF6F0", padding: "36px 28px", height: "100%" }}>
-                  <h3 style={{ fontFamily: "Georgia, serif", fontSize: 20, color: "#3d3229", margin: "0 0 8px" }}>{f.title}</h3>
-                  <p style={{ fontSize: 13, color: "#8a7d6f", lineHeight: 1.6, marginBottom: f.detail ? 16 : 0 }}>{f.desc}</p>
-                  {f.detail && i !== 2 && (
-                    <div style={{ background: "#fff", border: "1px solid #e8dfd4", padding: "10px 14px", fontFamily: "'Courier New', monospace", fontSize: 11, color: "#5a5048", lineHeight: 1.6 }}>
-                      {f.detail}
-                    </div>
-                  )}
-                  {i === 2 && (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 3, marginTop: 16 }}>
-                      {["#7a9e5c","#8aab64","#6b8e4e","#c9a96e","#c47a4a","#7a9e5c","#8aab64","#a8c27a","#c47a4a","#9ab86c"].map((c, j) => (
-                        <div key={j} style={{ aspectRatio: "1", borderRadius: 2, background: c }} />
-                      ))}
-                    </div>
-                  )}
+              <Fade key={f.title} delay={i * 0.1}>
+                <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.05)", height: "100%" }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: "#f4f0e8", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14, fontSize: 18, color: "#C17A56" }}>{f.icon}</div>
+                  <h3 style={{ fontSize: 20, color: "#3d3229", margin: "0 0 6px", fontWeight: 700 }}>{f.title}</h3>
+                  <p style={{ fontSize: 13, color: "#8a7d6f", lineHeight: 1.6, margin: 0 }}>{f.desc}</p>
+                  {f.detail}
                 </div>
-              </Reveal>
+              </Fade>
             ))}
           </div>
         </div>
@@ -207,36 +204,40 @@ export default function LandingPage() {
 
       {/* ─── WORKFLOW ─── */}
       <section style={{ maxWidth: 1200, margin: "0 auto", padding: "80px 48px", textAlign: "center" }}>
-        <Reveal>
-          <h2 style={{ fontFamily: "Georgia, serif", fontSize: 38, color: "#3d3229", fontStyle: "italic", margin: "0 0 48px" }}>Workflow Integration</h2>
-        </Reveal>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+        <Fade>
+          <h2 style={{ fontFamily: "Georgia, serif", fontSize: 36, color: "#3d3229", fontStyle: "italic", margin: "0 0 48px" }}>Workflow Integration</h2>
+        </Fade>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
           {[
-            { n: "01", title: "CONNECT CLASSROOM", desc: "Sync rosters and quizzes with secure OAuth." },
-            { n: "02", title: "AUTOMATED SCAN", desc: "Engine maps answers against misconception patterns." },
-            { n: "03", title: "ACTIONABLE INSIGHTS", desc: "Grouped cohorts with reteaching strategies." },
+            { n: "1", title: "Connect Classroom", desc: "Sync rosters and quizzes with a single secure OAuth authorization.", gradient: "linear-gradient(135deg, #C17A56, #a96842)" },
+            { n: "2", title: "Automated Scan", desc: "Our engine parses quiz responses, mapping against 12,000+ misconception patterns.", gradient: "linear-gradient(135deg, #8a7d6f, #6b6058)" },
+            { n: "3", title: "Actionable Insights", desc: "Receive grouped student cohorts and specific reteaching strategies.", gradient: "linear-gradient(135deg, #6B8E5C, #4a7340)" },
           ].map((s, i) => (
-            <Reveal key={s.n} delay={i * 0.12}>
-              <div style={{ background: "#3d3229", padding: "36px 24px", textAlign: "left", position: "relative", borderTop: "3px solid #C17A56" }}>
-                <span style={{ fontFamily: "'Courier New', monospace", fontSize: 48, fontWeight: 700, color: "rgba(193,122,86,0.12)", position: "absolute", top: 10, right: 16 }}>{s.n}</span>
-                <h4 style={{ fontSize: 12, fontWeight: 700, letterSpacing: 2.5, color: "#D4956E", margin: "0 0 12px" }}>{s.title}</h4>
-                <p style={{ fontSize: 13, lineHeight: 1.65, color: "rgba(255,255,255,0.5)", margin: 0 }}>{s.desc}</p>
+            <Fade key={s.n} delay={i * 0.12}>
+              <div style={{ background: s.gradient, borderRadius: 24, padding: "36px 28px", textAlign: "left", position: "relative", overflow: "hidden" }}>
+                <span style={{ position: "absolute", top: 16, right: 20, fontSize: 64, fontWeight: 800, color: "rgba(255,255,255,0.08)" }}>{s.n}</span>
+                <h4 style={{ fontSize: 14, fontWeight: 700, letterSpacing: 1, color: "rgba(255,255,255,0.9)", margin: "0 0 12px", textTransform: "uppercase" }}>{s.title}</h4>
+                <p style={{ fontSize: 14, lineHeight: 1.65, color: "rgba(255,255,255,0.6)", margin: 0 }}>{s.desc}</p>
               </div>
-            </Reveal>
+            </Fade>
           ))}
         </div>
       </section>
 
       {/* ─── CTA ─── */}
-      <section style={{ background: "#3d3229", borderTop: "3px solid #C17A56", padding: "80px 48px", textAlign: "center" }}>
-        <Reveal>
-          <h2 style={{ fontFamily: "Georgia, serif", fontSize: 34, color: "#FAF6F0", margin: "0 0 16px" }}>Ready to decode your classroom?</h2>
-          <p style={{ fontSize: 14, color: "rgba(250,246,240,0.5)", marginBottom: 32 }}>AI-powered quiz analytics for every teacher.</p>
-          <a href="/api/auth/login" style={{ textDecoration: "none", border: "2px solid #C17A56", background: "#C17A56", color: "#fff", padding: "16px 36px", fontSize: 14, fontWeight: 700, letterSpacing: 1, display: "inline-block" }}>
-            GET STARTED WITH GOOGLE
-          </a>
-          <p style={{ fontSize: 10, color: "rgba(250,246,240,0.3)", marginTop: 20, letterSpacing: 1.5 }}>SDG 4 · QUALITY EDUCATION · KITAHACK 2026 · GEMINI AI</p>
-        </Reveal>
+      <section style={{ textAlign: "center", padding: "60px 48px 80px", position: "relative", overflow: "hidden" }}>
+        <Blob color="#6B8E5C" size={300} top="20%" left="10%" blur={100} />
+        <Blob color="#C17A56" size={250} top="10%" left="70%" blur={100} />
+        <Fade>
+          <div style={{ position: "relative", zIndex: 2 }}>
+            <h2 style={{ fontFamily: "Georgia, serif", fontSize: 36, color: "#3d3229", margin: "0 0 16px" }}>Begin your teaching evolution</h2>
+            <p style={{ fontSize: 15, color: "#8a7d6f", marginBottom: 32 }}>Join teachers using AI to grow every student.</p>
+            <a href="/api/auth/login" style={{ textDecoration: "none", background: "linear-gradient(135deg, #C17A56, #6B8E5C)", color: "#fff", padding: "16px 36px", borderRadius: 28, fontSize: 16, fontWeight: 600, display: "inline-block", boxShadow: "0 8px 32px rgba(107,142,92,0.2)" }}>
+              Get Started with Google
+            </a>
+            <p style={{ fontSize: 11, color: "#b5aa9c", marginTop: 20 }}>SDG 4 · Quality Education · KitaHack 2026 · Gemini AI</p>
+          </div>
+        </Fade>
       </section>
     </div>
   );
