@@ -737,6 +737,65 @@ export function QuizAnalysisPanel({ courseId, quizId }: { courseId: string; quiz
   );
 }
 
+function InsightsCollapsible({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div>
+      <button
+        className="edu-collapsible-trigger"
+        aria-expanded={open}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#5A5048" }}>{title}</span>
+        <span className="edu-chevron">{"\u25BC"}</span>
+      </button>
+      <div className="edu-collapsible-body" data-open={open}>
+        <div>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function buildTakeaway(
+  totalStudents: number,
+  atRiskCount: number,
+  avgScore: number,
+  conceptCount: number,
+): string {
+  const parts: string[] = [];
+
+  if (atRiskCount > 0) {
+    parts.push(
+      `${atRiskCount} of ${totalStudents} student${totalStudents !== 1 ? "s" : ""} need${atRiskCount === 1 ? "s" : ""} attention`,
+    );
+  } else {
+    parts.push(`All ${totalStudents} students are on track`);
+  }
+
+  if (avgScore < 55) {
+    parts.push(`class average is low at ${avgScore.toFixed(0)}%`);
+  } else if (avgScore >= 80) {
+    parts.push(`class average is strong at ${avgScore.toFixed(0)}%`);
+  }
+
+  if (conceptCount > 0) {
+    parts.push(
+      `${conceptCount} concept${conceptCount !== 1 ? "s" : ""} showing gaps`,
+    );
+  }
+
+  return parts.join(" \u00b7 ");
+}
+
 export function QuizInsightsPanel({ courseId, quizId }: { courseId: string; quizId: string }) {
   const [data, setData] = useState<AnalysisData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -841,38 +900,52 @@ export function QuizInsightsPanel({ courseId, quizId }: { courseId: string; quiz
     studentsStruggling: concept.affectedStudentCount,
     dominantErrorType: concept.dominantErrorType as "conceptual" | "procedural" | "careless",
   }));
-  const errorTypeColumns = Math.max(errorTypeBreakdown.length, 1);
   const totalStudents = data.modelOutput.students.length;
   const atRiskRate = totalStudents > 0 ? (atRiskCount / totalStudents) * 100 : 0;
+
+  const takeaway = buildTakeaway(totalStudents, atRiskCount, scoreMetrics.averageScore, conceptHeatmap.length);
+
   const insightStats = [
     {
       label: "Average",
       value: scoreMetrics.averageScore.toFixed(1),
+      unit: "%",
       color: getPerformanceColor(scoreMetrics.averageScore),
     },
     {
       label: "Median",
       value: String(Math.round(scoreMetrics.medianScore)),
+      unit: "%",
       color: getPerformanceColor(scoreMetrics.medianScore),
     },
     {
       label: "Completion",
-      value: `${scoreMetrics.averageCompletionRate.toFixed(2)}%`,
+      value: scoreMetrics.averageCompletionRate.toFixed(0),
+      unit: "%",
       color: getPerformanceColor(scoreMetrics.averageCompletionRate),
     },
     {
       label: "At Risk",
       value: String(atRiskCount),
+      unit: `/${totalStudents}`,
       color: getInversePerformanceColor(atRiskRate),
     },
   ];
 
+  const maxErrorPct = Math.max(...errorTypeBreakdown.map((e) => e.percentage), 1);
+
   return (
     <div>
-      <div className="edu-fade-in" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
-        <h1 className="edu-heading" style={{ fontSize: 22, margin: 0 }}>
-          Class Insights
-        </h1>
+      {/* ── Header ── */}
+      <div className="edu-fade-in" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+        <div>
+          <h1 className="edu-heading" style={{ fontSize: 22, margin: "0 0 4px" }}>
+            Class Insights
+          </h1>
+          <p className="edu-muted" style={{ fontSize: 13, margin: 0 }}>
+            {totalStudents} student{totalStudents !== 1 ? "s" : ""} analyzed
+          </p>
+        </div>
         <Link href={routes.quizWorkspace(courseId, quizId, { view: "students" })}>
           <button className="edu-btn" style={{ fontSize: 13, padding: "8px 18px" }}>
             View Students
@@ -886,70 +959,167 @@ export function QuizInsightsPanel({ courseId, quizId }: { courseId: string; quiz
         </p>
       )}
 
-      <div className="edu-refresh-layer edu-fade-in edu-fd1" style={{ marginBottom: 20 }}>
+      {/* ── Takeaway strip ── */}
+      <div
+        className="edu-fade-in edu-fd1"
+        style={{
+          padding: "10px 16px",
+          borderRadius: 6,
+          background: atRiskCount > 0 ? "#FEF4E5" : "#E9F3E5",
+          borderLeft: `3px solid ${atRiskCount > 0 ? "#C17A56" : "#3D7A2E"}`,
+          marginBottom: 20,
+          fontSize: 13,
+          fontWeight: 600,
+          color: atRiskCount > 0 ? "#8B6914" : "#3D7A2E",
+        }}
+      >
+        {takeaway}
+      </div>
+
+      {/* ── Metric cards ── */}
+      <div className="edu-refresh-layer edu-fade-in edu-fd2" style={{ marginBottom: 24 }}>
+        <p className="edu-section-label">Performance Snapshot</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
           {insightStats.map((stat) => (
-            <div key={stat.label} className="edu-card" style={{ padding: 18, textAlign: "center" }}>
-              <p className="edu-muted" style={{ fontSize: 11, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.8 }}>
+            <div key={stat.label} className="edu-card" style={{ padding: "16px 14px", textAlign: "center" }}>
+              <p className="edu-muted" style={{ fontSize: 10, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.8 }}>
                 {stat.label}
               </p>
-              <p style={{ fontSize: 26, fontWeight: 700, color: stat.color, margin: 0 }}>{stat.value}</p>
+              <p style={{ fontSize: 24, fontWeight: 700, color: stat.color, margin: 0, lineHeight: 1.1 }}>
+                {stat.value}
+                <span style={{ fontSize: 12, fontWeight: 500, color: "#B5AA9C" }}>{stat.unit}</span>
+              </p>
             </div>
           ))}
         </div>
         <RefreshingOverlay show={refreshing} label="Updating insight summary..." />
       </div>
 
-      <div className="edu-refresh-layer edu-fade-in edu-fd2" style={{ marginBottom: 20 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          <div className="edu-card" style={{ padding: 24 }}>
-            <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14 }}>Concept Mastery</h3>
-            <ConceptHeatmap data={heatmapData} />
-          </div>
-          <div className="edu-card" style={{ padding: 24 }}>
-            <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14 }}>Risk Levels</h3>
-            <RiskDistribution data={riskChartData} />
-          </div>
+      {/* ── Visual Breakdown (collapsible charts) ── */}
+      <div className="edu-card edu-fade-in edu-fd3" style={{ padding: 0, marginBottom: 20, overflow: "hidden" }}>
+        <div style={{ padding: "4px 8px" }}>
+          <InsightsCollapsible title="Visual Breakdown" defaultOpen={true}>
+            <div style={{ padding: "4px 16px 20px" }}>
+              <div className="edu-refresh-layer">
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  <div style={{ background: "#FDFBF7", borderRadius: 8, padding: "18px 16px" }}>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: "#5A5048", margin: "0 0 12px", textTransform: "uppercase", letterSpacing: 0.4 }}>
+                      Concept Mastery
+                    </p>
+                    <ConceptHeatmap data={heatmapData} />
+                  </div>
+                  <div style={{ background: "#FDFBF7", borderRadius: 8, padding: "18px 16px" }}>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: "#5A5048", margin: "0 0 12px", textTransform: "uppercase", letterSpacing: 0.4 }}>
+                      Risk Distribution
+                    </p>
+                    <RiskDistribution data={riskChartData} />
+                  </div>
+                </div>
+                <RefreshingOverlay show={refreshing} label="Refreshing charts..." />
+              </div>
+            </div>
+          </InsightsCollapsible>
         </div>
-        <RefreshingOverlay show={refreshing} label="Refreshing charts..." />
       </div>
 
-      <div className="edu-card edu-fade-in edu-fd3" style={{ padding: 24 }}>
-        <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 16 }}>Error Types</h3>
-        {errorTypeBreakdown.length === 0 ? (
-          <p className="edu-muted" style={{ fontSize: 13, margin: 0 }}>
-            No error breakdown is available yet.
-          </p>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${errorTypeColumns}, 1fr)`, gap: 14 }}>
-            {errorTypeBreakdown.map((errorType) => (
-              <div
-                key={errorType.errorType}
-                style={{
-                  padding: 20,
-                  background: "#FAF6F0",
-                  borderRadius: 8,
-                  textAlign: "center",
-                }}
-              >
-                <p style={{
-                  fontSize: 28,
-                  fontWeight: 700,
-                  color: ERROR_TYPE_COLORS[errorType.errorType] ?? "#3D3229",
-                  margin: "0 0 4px",
-                }}>
-                  {errorType.percentage}%
+      {/* ── Error Type Breakdown (horizontal bars instead of big numbers) ── */}
+      <div className="edu-card edu-fade-in edu-fd4" style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "4px 8px" }}>
+          <InsightsCollapsible title={`Error Types (${errorTypeBreakdown.length})`} defaultOpen={false}>
+            <div style={{ padding: "4px 16px 20px" }}>
+              {errorTypeBreakdown.length === 0 ? (
+                <p className="edu-muted" style={{ fontSize: 13, margin: 0 }}>
+                  No error breakdown is available yet.
                 </p>
-                <p className="edu-muted" style={{ fontSize: 13, textTransform: "capitalize", margin: 0 }}>
-                  {errorType.errorType}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {errorTypeBreakdown.map((entry) => {
+                    const barColor = ERROR_TYPE_COLORS[entry.errorType] ?? "#3D3229";
+                    const barBg = ERROR_TYPE_BG[entry.errorType] ?? "#F5F0E9";
+                    return (
+                      <div key={entry.errorType}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                          <span style={{
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: barColor,
+                            textTransform: "capitalize",
+                          }}>
+                            {entry.errorType}
+                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: barColor }}>
+                            {entry.percentage}%
+                          </span>
+                        </div>
+                        <div style={{
+                          height: 8,
+                          borderRadius: 999,
+                          background: barBg,
+                          overflow: "hidden",
+                        }}>
+                          <div style={{
+                            height: "100%",
+                            borderRadius: 999,
+                            background: barColor,
+                            width: `${(entry.percentage / maxErrorPct) * 100}%`,
+                            transition: "width 0.4s ease",
+                          }} />
+                        </div>
+                        <p className="edu-muted" style={{ fontSize: 11, margin: "4px 0 0" }}>
+                          {entry.count} occurrence{entry.count !== 1 ? "s" : ""}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </InsightsCollapsible>
+        </div>
       </div>
     </div>
   );
+}
+
+type BatchModalPhase = "select" | "generating" | "results";
+
+function matchesBatchFilter(riskLevel: string, filter: BatchCategoryFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "critical+high" || filter === "critical_high") {
+    return riskLevel === "critical" || riskLevel === "high";
+  }
+  return riskLevel === filter;
+}
+
+function getBatchCategoryOptions(
+  students: StudentAnalysis[],
+  getDisplayName: (id: string) => string,
+): Array<{
+  value: BatchCategoryFilter;
+  label: string;
+  count: number;
+  preview: string[];
+}> {
+  const byRisk = (levels: string[]) =>
+    students.filter((s) => levels.includes(s.riskLevel));
+
+  const previewNames = (list: StudentAnalysis[], max: number) =>
+    list.slice(0, max).map((s) => getDisplayName(s.studentId));
+
+  const critHigh = byRisk(["critical", "high"]);
+  const critical = byRisk(["critical"]);
+  const high = byRisk(["high"]);
+  const medium = byRisk(["medium"]);
+  const low = byRisk(["low"]);
+
+  return [
+    { value: "critical+high", label: "Critical + High", count: critHigh.length, preview: previewNames(critHigh, 4) },
+    { value: "critical", label: "Critical only", count: critical.length, preview: previewNames(critical, 4) },
+    { value: "high", label: "High only", count: high.length, preview: previewNames(high, 4) },
+    { value: "medium", label: "Medium", count: medium.length, preview: previewNames(medium, 4) },
+    { value: "low", label: "Low", count: low.length, preview: previewNames(low, 4) },
+    { value: "all", label: "All students", count: students.length, preview: previewNames(students, 4) },
+  ];
 }
 
 export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quizId: string }) {
@@ -963,7 +1133,8 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
   const [batchFilter, setBatchFilter] = useState<BatchCategoryFilter>("critical+high");
   const [batchResult, setBatchResult] = useState<BatchGenerationResult | null>(null);
   const [batchError, setBatchError] = useState<string | null>(null);
-  const [showBatchDialog, setShowBatchDialog] = useState(false);
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchPhase, setBatchPhase] = useState<BatchModalPhase>("select");
 
   const loadStudents = useCallback(async (mode: "initial" | "refresh" = "initial") => {
     if (mode === "refresh") {
@@ -1012,6 +1183,24 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
     };
   }, [loadStudents]);
 
+  useEffect(() => {
+    if (!showBatchModal) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !batchGenerating) {
+        closeBatchModal();
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [showBatchModal, batchGenerating]);
+
   const filtered = students
     .filter((student) => riskFilter === "all" || student.riskLevel === riskFilter);
 
@@ -1031,10 +1220,24 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
     return email.split("@")[0].replace(/[._]/g, " ");
   }, [emailMap]);
 
+  function openBatchModal() {
+    setBatchPhase("select");
+    setBatchResult(null);
+    setBatchError(null);
+    setShowBatchModal(true);
+  }
+
+  function closeBatchModal() {
+    if (batchGenerating) return;
+    setShowBatchModal(false);
+    setBatchPhase("select");
+  }
+
   async function runBatchGenerate() {
     setBatchGenerating(true);
     setBatchResult(null);
     setBatchError(null);
+    setBatchPhase("generating");
     try {
       const response = await fetch("/api/notes/batch", {
         method: "POST",
@@ -1058,14 +1261,20 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
         total: payload.total ?? 0,
         results: payload.results ?? [],
       });
+      setBatchPhase("results");
     } catch (runError) {
       const message = runError instanceof Error ? runError.message : "Batch generation failed";
       setBatchError(toReadableGenerationError(message, "Batch generation failed"));
+      setBatchPhase("results");
     } finally {
       setBatchGenerating(false);
-      setShowBatchDialog(false);
     }
   }
+
+  const batchCategoryOptions = getBatchCategoryOptions(students, getDisplayName);
+  const selectedCategory = batchCategoryOptions.find((opt) => opt.value === batchFilter);
+  const selectedCount = selectedCategory?.count ?? 0;
+  const targetStudents = students.filter((s) => matchesBatchFilter(s.riskLevel, batchFilter));
 
   if (loading) {
     return (
@@ -1127,112 +1336,449 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
         <button
           className="edu-btn"
           style={{ fontSize: 13, padding: "8px 16px" }}
-          onClick={() => setShowBatchDialog(true)}
+          onClick={openBatchModal}
           disabled={batchGenerating}
         >
           {batchGenerating ? "Generating Notes..." : "Batch Generate Notes"}
         </button>
       </div>
 
-      {showBatchDialog && (
-        <div className="edu-card edu-fade-in" style={{ padding: 20, marginBottom: 16, background: "#FCF8F3" }}>
-          <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Batch Generate Asset Notes</p>
-          <p style={{ fontSize: 12, color: "#6D6154", marginBottom: 12 }}>
-            Select which students to generate notes for:
-          </p>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-            {[
-              { value: "critical+high" as BatchCategoryFilter, label: "Critical + High (recommended)" },
-              { value: "critical" as BatchCategoryFilter, label: "Critical only" },
-              { value: "high" as BatchCategoryFilter, label: "High only" },
-              { value: "medium" as BatchCategoryFilter, label: "Medium" },
-              { value: "low" as BatchCategoryFilter, label: "Low" },
-              { value: "all" as BatchCategoryFilter, label: "All students" },
-            ].map((option) => (
-              <button
-                key={option.value}
-                onClick={() => setBatchFilter(option.value)}
-                style={{
-                  padding: "5px 12px",
-                  borderRadius: 16,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  border: batchFilter === option.value ? "1.5px solid #6E4836" : "1.5px solid #E8DFD4",
-                  background: batchFilter === option.value ? "#6E4836" : "#FFF",
-                  color: batchFilter === option.value ? "#FFF" : "#6D6154",
-                }}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              className="edu-btn"
-              style={{ fontSize: 12 }}
-              onClick={() => {
-                void runBatchGenerate();
-              }}
-              disabled={batchGenerating}
-            >
-              {batchGenerating ? "Generating..." : "Generate"}
-            </button>
-            <button className="edu-btn-outline" style={{ fontSize: 12 }} onClick={() => setShowBatchDialog(false)}>
-              Cancel
-            </button>
-          </div>
-          <p style={{ fontSize: 11, color: "#8A7D6F", marginTop: 8, fontStyle: "italic" }}>
-            AI-generated drafts | review before sharing
-          </p>
-        </div>
-      )}
-
-      {batchResult && (
+      {/* ── Batch generation modal ── */}
+      {showBatchModal ? (
         <div
-          className="edu-card edu-fade-in"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Batch generate asset notes"
           style={{
-            padding: 16,
-            marginBottom: 16,
-            background: batchResult.failed > 0 ? "#FEF8E7" : "#E9F3E5",
+            position: "fixed",
+            inset: 0,
+            background: "rgba(34, 25, 18, 0.38)",
+            zIndex: 40,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
           }}
+          onClick={() => { if (!batchGenerating) closeBatchModal(); }}
         >
-          <p
+          <div
+            className="edu-card edu-fade-in"
             style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: batchResult.failed > 0 ? "#8B6914" : "#3D7A2E",
-              marginBottom: 4,
+              width: "min(680px, 100%)",
+              maxHeight: "88vh",
+              overflow: "hidden",
+              background: "#FFFDF9",
+              display: "flex",
+              flexDirection: "column",
             }}
+            onClick={(event) => event.stopPropagation()}
           >
-            Batch Complete: {batchResult.generated} generated, {batchResult.failed} failed after automatic retries
-          </p>
-          {batchResult.failed > 0 ? (
-            <div style={{ marginTop: 8 }}>
-              <p style={{ fontSize: 11, color: "#8A7D6F", margin: "0 0 4px" }}>
-                Remaining failures below could not be recovered after retry attempts:
-              </p>
-              {batchResult.results
-                .filter((entry) => entry.status === "error")
-                .map((entry) => (
-                  <p key={entry.studentId} style={{ fontSize: 11, color: "#A63D2E", margin: "2px 0" }}>
-                    {getDisplayName(entry.studentId)}: {toReadableGenerationError(entry.error, "Generation failed")}
-                  </p>
-                ))}
+            {/* ── Modal header ── */}
+            <div style={{
+              padding: "18px 22px 14px",
+              borderBottom: "1px solid #F0ECE5",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}>
+              <div>
+                <h3 className="edu-heading" style={{ fontSize: 17, margin: 0 }}>
+                  Batch Generate Asset Notes
+                </h3>
+                <p className="edu-muted" style={{ fontSize: 11, margin: "3px 0 0" }}>
+                  AI-generated drafts &middot; review before sharing
+                </p>
+              </div>
+              {!batchGenerating && (
+                <button
+                  className="edu-btn-outline"
+                  style={{ fontSize: 12, padding: "4px 12px" }}
+                  onClick={closeBatchModal}
+                >
+                  Close
+                </button>
+              )}
             </div>
-          ) : null}
-          <button
-            className="edu-btn-outline"
-            style={{ fontSize: 11, padding: "3px 10px", marginTop: 8 }}
-            onClick={() => setBatchResult(null)}
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
 
-      {batchError ? (
-        <p style={{ marginBottom: 12, fontSize: 12, color: "#A63D2E" }}>{batchError}</p>
+            {/* ── Modal body ── */}
+            <div style={{ padding: "16px 22px 20px", overflowY: "auto", flex: 1 }}>
+
+              {/* ── Phase: Select ── */}
+              {batchPhase === "select" && (
+                <>
+                  <p className="edu-section-label">Select Student Group</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+                    {batchCategoryOptions.map((option) => {
+                      const isSelected = batchFilter === option.value;
+                      const isEmpty = option.count === 0;
+                      return (
+                        <button
+                          key={option.value}
+                          onClick={() => { if (!isEmpty) setBatchFilter(option.value); }}
+                          disabled={isEmpty}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 12,
+                            padding: "10px 14px",
+                            borderRadius: 8,
+                            border: isSelected ? "1.5px solid #6E4836" : "1.5px solid #E8DFD4",
+                            background: isSelected ? "#FAF4EE" : isEmpty ? "#F8F5EF" : "#FFF",
+                            cursor: isEmpty ? "not-allowed" : "pointer",
+                            opacity: isEmpty ? 0.5 : 1,
+                            fontFamily: "inherit",
+                            textAlign: "left",
+                            transition: "border-color 0.15s, background 0.15s",
+                            width: "100%",
+                          }}
+                        >
+                          <div style={{
+                            width: 14,
+                            height: 14,
+                            borderRadius: "50%",
+                            border: isSelected ? "4px solid #6E4836" : "2px solid #D0C8BE",
+                            background: isSelected ? "#FFF" : "transparent",
+                            flexShrink: 0,
+                            transition: "all 0.15s",
+                          }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span style={{
+                                fontSize: 13,
+                                fontWeight: 600,
+                                color: isSelected ? "#3D3229" : "#5A5048",
+                              }}>
+                                {option.label}
+                              </span>
+                              <span style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: isSelected ? "#6E4836" : "#B5AA9C",
+                                background: isSelected ? "#EDE4DA" : "#F0ECE5",
+                                padding: "1px 7px",
+                                borderRadius: 10,
+                              }}>
+                                {option.count}
+                              </span>
+                              {option.value === "critical+high" && option.count > 0 && (
+                                <span style={{
+                                  fontSize: 9,
+                                  fontWeight: 700,
+                                  color: "#C17A56",
+                                  textTransform: "uppercase",
+                                  letterSpacing: 0.6,
+                                }}>
+                                  Recommended
+                                </span>
+                              )}
+                            </div>
+                            {option.count > 0 && (
+                              <p style={{
+                                fontSize: 11,
+                                color: "#B5AA9C",
+                                margin: "3px 0 0",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                textTransform: "capitalize",
+                              }}>
+                                {option.preview.join(", ")}
+                                {option.count > option.preview.length
+                                  ? ` +${option.count - option.preview.length} more`
+                                  : ""}
+                              </p>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Preview of selected students */}
+                  {selectedCount > 0 && (
+                    <div style={{
+                      background: "#F8F5EF",
+                      borderRadius: 8,
+                      padding: "10px 14px",
+                      marginBottom: 16,
+                    }}>
+                      <p style={{ fontSize: 11, fontWeight: 700, color: "#8A7D6F", margin: "0 0 6px", textTransform: "uppercase", letterSpacing: 0.4 }}>
+                        Will generate for {selectedCount} student{selectedCount !== 1 ? "s" : ""}
+                      </p>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {targetStudents.slice(0, 8).map((s) => {
+                          const riskStyle = RISK_COLORS[s.riskLevel] ?? RISK_COLORS.low;
+                          return (
+                            <span
+                              key={s.studentId}
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 600,
+                                padding: "3px 8px",
+                                borderRadius: 4,
+                                background: riskStyle.bg,
+                                color: riskStyle.color,
+                                textTransform: "capitalize",
+                              }}
+                            >
+                              {getDisplayName(s.studentId)}
+                            </span>
+                          );
+                        })}
+                        {targetStudents.length > 8 && (
+                          <span style={{ fontSize: 11, color: "#8A7D6F", padding: "3px 4px" }}>
+                            +{targetStudents.length - 8} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      className="edu-btn"
+                      style={{ fontSize: 13 }}
+                      onClick={() => { void runBatchGenerate(); }}
+                      disabled={selectedCount === 0}
+                    >
+                      Generate {selectedCount > 0 ? `${selectedCount} Note${selectedCount !== 1 ? "s" : ""}` : "Notes"}
+                    </button>
+                    <button className="edu-btn-outline" style={{ fontSize: 13 }} onClick={closeBatchModal}>
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* ── Phase: Generating ── */}
+              {batchPhase === "generating" && (
+                <div style={{ textAlign: "center", padding: "32px 0" }}>
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      border: "3px solid #E8DFD4",
+                      borderTopColor: "#C17A56",
+                      borderRadius: "50%",
+                      animation: "spin 0.8s linear infinite",
+                      margin: "0 auto 18px",
+                    }}
+                  />
+                  <p style={{ fontSize: 15, fontWeight: 600, color: "#5A5048", marginBottom: 6 }}>
+                    Generating asset notes...
+                  </p>
+                  <p className="edu-muted" style={{ fontSize: 13, marginBottom: 4 }}>
+                    Creating notes for {selectedCount} student{selectedCount !== 1 ? "s" : ""}
+                  </p>
+                  <p className="edu-muted" style={{ fontSize: 12, marginBottom: 16 }}>
+                    This may take a minute. Please don&apos;t close this window.
+                  </p>
+
+                  <div style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 4,
+                    justifyContent: "center",
+                    maxWidth: 480,
+                    margin: "0 auto",
+                  }}>
+                    {targetStudents.slice(0, 12).map((s) => {
+                      const riskStyle = RISK_COLORS[s.riskLevel] ?? RISK_COLORS.low;
+                      return (
+                        <span
+                          key={s.studentId}
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            padding: "2px 8px",
+                            borderRadius: 4,
+                            background: riskStyle.bg,
+                            color: riskStyle.color,
+                            textTransform: "capitalize",
+                            opacity: 0.7,
+                          }}
+                        >
+                          {getDisplayName(s.studentId)}
+                        </span>
+                      );
+                    })}
+                    {targetStudents.length > 12 && (
+                      <span style={{ fontSize: 10, color: "#B5AA9C", padding: "2px 4px" }}>
+                        +{targetStudents.length - 12} more
+                      </span>
+                    )}
+                  </div>
+
+                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                </div>
+              )}
+
+              {/* ── Phase: Results ── */}
+              {batchPhase === "results" && (
+                <div>
+                  {batchResult ? (
+                    <>
+                      {/* Success/fail summary */}
+                      <div style={{
+                        display: "flex",
+                        gap: 12,
+                        marginBottom: 18,
+                      }}>
+                        <div style={{
+                          flex: 1,
+                          background: "#E9F3E5",
+                          borderRadius: 8,
+                          padding: "14px 16px",
+                          textAlign: "center",
+                        }}>
+                          <p style={{ fontSize: 28, fontWeight: 700, color: "#3D7A2E", margin: 0 }}>
+                            {batchResult.generated}
+                          </p>
+                          <p style={{ fontSize: 11, color: "#3D7A2E", margin: "2px 0 0", fontWeight: 600 }}>
+                            Generated
+                          </p>
+                        </div>
+                        {batchResult.failed > 0 && (
+                          <div style={{
+                            flex: 1,
+                            background: "#FDECEA",
+                            borderRadius: 8,
+                            padding: "14px 16px",
+                            textAlign: "center",
+                          }}>
+                            <p style={{ fontSize: 28, fontWeight: 700, color: "#A63D2E", margin: 0 }}>
+                              {batchResult.failed}
+                            </p>
+                            <p style={{ fontSize: 11, color: "#A63D2E", margin: "2px 0 0", fontWeight: 600 }}>
+                              Failed
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Per-student results */}
+                      <p className="edu-section-label">Student Results</p>
+                      <div style={{
+                        maxHeight: 280,
+                        overflowY: "auto",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 4,
+                        marginBottom: 16,
+                      }}>
+                        {batchResult.results.map((entry) => {
+                          const studentMatch = students.find((s) => s.studentId === entry.studentId);
+                          const riskStyle = studentMatch
+                            ? RISK_COLORS[studentMatch.riskLevel] ?? RISK_COLORS.low
+                            : RISK_COLORS.low;
+                          const isSuccess = entry.status === "success";
+                          return (
+                            <div
+                              key={entry.studentId}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 10,
+                                padding: "8px 12px",
+                                borderRadius: 6,
+                                background: isSuccess ? "#F6FBF4" : "#FDF4F2",
+                              }}
+                            >
+                              <span style={{
+                                width: 18,
+                                height: 18,
+                                borderRadius: "50%",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: 10,
+                                fontWeight: 700,
+                                background: isSuccess ? "#E9F3E5" : "#FDECEA",
+                                color: isSuccess ? "#3D7A2E" : "#A63D2E",
+                                flexShrink: 0,
+                              }}>
+                                {isSuccess ? "\u2713" : "\u2717"}
+                              </span>
+                              <span style={{
+                                fontSize: 13,
+                                fontWeight: 500,
+                                color: "#3D3229",
+                                textTransform: "capitalize",
+                                flex: 1,
+                                minWidth: 0,
+                              }}>
+                                {getDisplayName(entry.studentId)}
+                              </span>
+                              <span style={{
+                                fontSize: 10,
+                                fontWeight: 600,
+                                padding: "2px 7px",
+                                borderRadius: 3,
+                                background: riskStyle.bg,
+                                color: riskStyle.color,
+                                textTransform: "lowercase",
+                                flexShrink: 0,
+                              }}>
+                                {studentMatch?.riskLevel ?? "—"}
+                              </span>
+                              {!isSuccess && entry.error && (
+                                <span style={{
+                                  fontSize: 10,
+                                  color: "#A63D2E",
+                                  maxWidth: 180,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                  flexShrink: 0,
+                                }}
+                                  title={toReadableGenerationError(entry.error, "Generation failed")}
+                                >
+                                  {toReadableGenerationError(entry.error, "Failed")}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <button className="edu-btn" style={{ fontSize: 13 }} onClick={closeBatchModal}>
+                        Done
+                      </button>
+                    </>
+                  ) : batchError ? (
+                    <>
+                      <div style={{
+                        background: "#FDECEA",
+                        borderRadius: 8,
+                        padding: "16px 18px",
+                        marginBottom: 16,
+                      }}>
+                        <p style={{ fontSize: 14, fontWeight: 600, color: "#A63D2E", margin: "0 0 6px" }}>
+                          Generation Failed
+                        </p>
+                        <p style={{ fontSize: 13, color: "#5A5048", margin: 0, lineHeight: 1.55 }}>
+                          {batchError}
+                        </p>
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button
+                          className="edu-btn"
+                          style={{ fontSize: 13 }}
+                          onClick={() => { setBatchPhase("select"); setBatchError(null); }}
+                        >
+                          Try Again
+                        </button>
+                        <button className="edu-btn-outline" style={{ fontSize: 13 }} onClick={closeBatchModal}>
+                          Close
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {loadError && (
@@ -1332,6 +1878,104 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
           </table>
         </div>
         <RefreshingOverlay show={refreshing} label="Refreshing student insights..." />
+      </div>
+    </div>
+  );
+}
+
+function GapDetailCollapsible({
+  concept,
+  errorType,
+  affectedQuestions,
+  evidence,
+  index,
+}: {
+  concept: string;
+  errorType: string;
+  affectedQuestions: string[];
+  evidence: string;
+  index: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const errorColor = ERROR_TYPE_COLORS[errorType] ?? "#8A7D6F";
+  const errorBg = ERROR_TYPE_BG[errorType] ?? "#F5F0E9";
+
+  return (
+    <div style={{
+      borderRadius: 8,
+      border: "1px solid #F0ECE5",
+      overflow: "hidden",
+      transition: "box-shadow 0.2s",
+      boxShadow: open ? "0 2px 8px rgba(61, 50, 41, 0.06)" : "none",
+    }}>
+      <button
+        onClick={() => setOpen((prev) => !prev)}
+        aria-expanded={open}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          width: "100%",
+          padding: "14px 16px",
+          border: "none",
+          background: open ? "#FDFBF7" : "transparent",
+          cursor: "pointer",
+          fontFamily: "inherit",
+          textAlign: "left",
+          transition: "background 0.15s",
+        }}
+      >
+        <span
+          className="edu-priority-number"
+          style={{
+            background: errorBg,
+            color: errorColor,
+          }}
+        >
+          {index + 1}
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 14, fontWeight: 600, color: "#3D3229", margin: 0 }}>
+            {concept}
+          </p>
+          <p style={{ fontSize: 11, color: "#B5AA9C", margin: "2px 0 0" }}>
+            Q: {affectedQuestions.join(", ")}
+          </p>
+        </div>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            padding: "3px 10px",
+            borderRadius: 4,
+            color: errorColor,
+            background: errorBg,
+            textTransform: "lowercase",
+            flexShrink: 0,
+          }}
+        >
+          {errorType}
+        </span>
+        <span style={{
+          fontSize: 10,
+          color: "#B5AA9C",
+          transition: "transform 0.25s ease",
+          transform: open ? "rotate(180deg)" : "rotate(0deg)",
+          flexShrink: 0,
+        }}>{"\u25BC"}</span>
+      </button>
+      <div className="edu-collapsible-body" data-open={open}>
+        <div>
+          {evidence ? (
+            <div style={{ padding: "0 16px 14px 50px" }}>
+              <div className="edu-insight-strip" style={{ borderLeftColor: errorColor }}>
+                <p style={{ margin: 0, fontSize: 12, lineHeight: 1.6 }}>
+                  <strong>Evidence:</strong> {evidence}
+                </p>
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -1499,8 +2143,13 @@ export function QuizStudentDetailPanel({
     void generateNote();
   }
 
+  const conceptualGaps = student.misconceptions.filter((m) => m.errorType === "conceptual");
+  const otherGaps = student.misconceptions.filter((m) => m.errorType !== "conceptual");
+  const sortedGaps = [...conceptualGaps, ...otherGaps];
+
   return (
     <div>
+      {/* ── Student header card ── */}
       <div
         className="edu-card edu-fade-in"
         style={{
@@ -1576,79 +2225,123 @@ export function QuizStudentDetailPanel({
         </div>
       </div>
 
-      <div className="edu-card edu-fade-in edu-fd1" style={{ padding: 24, marginBottom: 14 }}>
-        <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14, fontWeight: 700 }}>
-          Knowledge Gaps
-        </h3>
-        {student.misconceptions.map((misconception, index) => (
-          <div
-            key={index}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "14px 0",
-              borderBottom: index < student.misconceptions.length - 1 ? "1px solid #F0ECE5" : "none",
-            }}
-          >
-            <div>
-              <p style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px" }}>{misconception.concept}</p>
-              <p style={{ fontSize: 12, color: "#B5AA9C", margin: 0 }}>
-                Questions: {misconception.affectedQuestions.join(", ")}
-              </p>
-            </div>
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                padding: "3px 10px",
-                borderRadius: 4,
-                color: ERROR_TYPE_COLORS[misconception.errorType] ?? "#8A7D6F",
-                background: ERROR_TYPE_BG[misconception.errorType] ?? "#F5F0E9",
-                textTransform: "lowercase",
-              }}
-            >
-              {misconception.errorType}
-            </span>
-          </div>
-        ))}
+      {/* ── Quick summary strip ── */}
+      <div
+        className="edu-fade-in edu-fd1"
+        style={{
+          padding: "10px 16px",
+          borderRadius: 6,
+          background: student.riskLevel === "critical" || student.riskLevel === "high" ? "#FDECEA" : "#FEF8E7",
+          borderLeft: `3px solid ${risk.color}`,
+          marginBottom: 20,
+          fontSize: 13,
+          color: "#5A5048",
+          lineHeight: 1.55,
+        }}
+      >
+        <strong style={{ color: risk.color }}>{student.misconceptions.length}</strong> knowledge gap{student.misconceptions.length !== 1 ? "s" : ""} identified &middot;{" "}
+        <strong style={{ color: "#C17A56" }}>{student.interventions.length}</strong> suggested intervention{student.interventions.length !== 1 ? "s" : ""}
       </div>
 
-      <div className="edu-card edu-fade-in edu-fd2" style={{ padding: 24, marginBottom: 14 }}>
-        <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14, fontWeight: 700 }}>
-          Interventions
-        </h3>
-        {student.interventions.map((intervention, index) => (
-          <div
-            key={index}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "14px 0",
-              borderBottom: index < student.interventions.length - 1 ? "1px solid #F0ECE5" : "none",
-            }}
-          >
+      {/* ── Knowledge Gaps (expandable cards) ── */}
+      <div className="edu-fade-in edu-fd2" style={{ marginBottom: 20 }}>
+        <p className="edu-section-label">Knowledge Gaps</p>
+        {sortedGaps.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {sortedGaps.map((misconception, index) => (
+              <GapDetailCollapsible
+                key={`gap-${index}`}
+                concept={misconception.concept}
+                errorType={misconception.errorType}
+                affectedQuestions={misconception.affectedQuestions}
+                evidence={misconception.evidence}
+                index={index}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="edu-muted" style={{ fontSize: 13 }}>No knowledge gaps identified.</p>
+        )}
+      </div>
+
+      {/* ── Rationale (if present) ── */}
+      {student.rationale ? (
+        <div className="edu-fade-in edu-fd3" style={{ marginBottom: 20 }}>
+          <div className="edu-insight-strip" style={{ borderLeftColor: "#2B5E9E" }}>
             <div>
-              <p style={{ fontSize: 14, fontWeight: 500, margin: "0 0 4px" }}>{intervention.action}</p>
-              <p style={{ fontSize: 12, color: "#B5AA9C", margin: 0 }}>
-                {intervention.focusArea} &middot; {intervention.type}
+              <p style={{ fontSize: 11, fontWeight: 700, color: "#8A7D6F", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                AI Rationale
+              </p>
+              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6, wordBreak: "break-word" }}>
+                {student.rationale}
               </p>
             </div>
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                padding: "3px 10px",
-                borderRadius: 4,
-                background: "#FEF8E7",
-                color: "#8B6914",
-              }}
-            >
-              Pending
-            </span>
           </div>
-        ))}
+        </div>
+      ) : null}
+
+      {/* ── Interventions (numbered action list) ── */}
+      <div className="edu-card edu-fade-in edu-fd4" style={{ padding: 20, marginBottom: 14 }}>
+        <p className="edu-section-label" style={{ margin: "0 0 14px" }}>Suggested Interventions</p>
+        {student.interventions.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {student.interventions.map((intervention, index) => (
+              <div
+                key={`intervention-${index}`}
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 12,
+                  padding: "12px 14px",
+                  background: "#FDFBF7",
+                  borderRadius: 8,
+                }}
+              >
+                <span
+                  className="edu-priority-number"
+                  style={{
+                    background: "#FEF8E7",
+                    color: "#8B6914",
+                    marginTop: 2,
+                  }}
+                >
+                  {index + 1}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: "#3D3229", margin: "0 0 4px" }}>
+                    {intervention.action}
+                  </p>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      padding: "2px 8px",
+                      borderRadius: 3,
+                      background: "#F0ECE5",
+                      color: "#6D6154",
+                      textTransform: "capitalize",
+                    }}>
+                      {intervention.focusArea}
+                    </span>
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      padding: "2px 8px",
+                      borderRadius: 3,
+                      background: "#E3EDF7",
+                      color: "#2B5E9E",
+                      textTransform: "capitalize",
+                    }}>
+                      {intervention.type}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="edu-muted" style={{ fontSize: 13, margin: 0 }}>No interventions suggested.</p>
+        )}
       </div>
 
       {showAssetModal && savedNote ? (
