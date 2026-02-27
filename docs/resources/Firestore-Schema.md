@@ -97,8 +97,86 @@ Stores Gemini analysis results.
   courseId: string
   modelOutput: ModelOutput         // from quiz-analysis-schema.ts
   derivedAnalysis: DerivedAnalysis // computed metrics
+  analysisInput: QuizAnalysisInput // original input sent to model
+  emailMapping: Record<string, string> // studentId -> respondent email
   createdAt: number
   modelId: string
   ownerId: string
+}
+```
+
+### `studentNotes/{courseId_quizId_studentId}`
+Stores AI-generated student asset notes.
+
+```
+{
+  noteId: string
+  courseId: string
+  quizId: string
+  studentId: string
+  displayName: string
+  note: {
+    studentId: string
+    displayName: string
+    topWeaknesses: [{
+      concept: string
+      errorType: "conceptual" | "procedural" | "careless"
+      rootIssue: string
+    }]
+    improvementTips: string[] // 3-5 actionable tips
+    teacherFollowUp: string
+  } | null
+  generatedAt: number
+  modelId: string
+  sourceAnalysisId: string
+  status: "success" | "error"
+  error?: string
+  ownerId: string
+}
+```
+
+### `courseMaterialAnalyses/{courseId}`
+Stores course-wide material analysis output.
+
+```
+{
+  courseId: string
+  analysis?: CourseMaterialAnalysisOutput // from course-material-schema.ts
+  analyzedQuizIds: string[]
+  analyzedAt: number
+  modelId: string
+  ownerId: string
+  status: "success" | "error" | "insufficient_data"
+  error?: string
+}
+```
+
+### `historyAnalyses/{courseId}`
+Stores longitudinal trend analysis output.
+
+```
+{
+  courseId: string
+  analysis?: {
+    overallTrend: "improving" | "stable" | "declining" | "insufficient_data"
+    confidence: "low" | "medium" | "high"
+    evidenceSummary: {
+      scoreTrajectorySummary: string
+      riskTrajectorySummary: string
+      recurringWeakConcepts: string[]
+    }
+    interventionImpactHypothesis: {
+      appearsToImprove: string[]
+      remainsUnresolved: string[]
+    }
+    nextCycleActions: string[] // 3-5 practical actions
+    trendContradiction?: string
+  }
+  analyzedQuizIds: string[]
+  analyzedAt: number
+  modelId: string
+  ownerId: string
+  status: "success" | "error" | "insufficient_data"
+  error?: string
 }
 ```

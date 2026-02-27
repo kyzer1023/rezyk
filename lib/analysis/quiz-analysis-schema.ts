@@ -8,6 +8,9 @@ export const ONLINE_GENERATION_PROFILE = {
   responseMimeType: "application/json",
   topP: 0.9,
   maxOutputTokens: 4096,
+  thinkingConfig: {
+    thinkingLevel: "minimal",
+  },
 } as const;
 
 export const RISK_LEVELS = ["low", "medium", "high", "critical"] as const;

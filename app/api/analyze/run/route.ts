@@ -179,6 +179,7 @@ function extractResponseMeta(response: unknown): {
   finishReason: string | null;
   promptTokenCount: number | null;
   candidatesTokenCount: number | null;
+  thoughtsTokenCount: number | null;
   totalTokenCount: number | null;
 } {
   const responseRecord = toRecord(response);
@@ -188,6 +189,7 @@ function extractResponseMeta(response: unknown): {
       finishReason: null,
       promptTokenCount: null,
       candidatesTokenCount: null,
+      thoughtsTokenCount: null,
       totalTokenCount: null,
     };
   }
@@ -207,6 +209,7 @@ function extractResponseMeta(response: unknown): {
     finishReason,
     promptTokenCount: usageMetadata ? toNumber(usageMetadata.promptTokenCount) : null,
     candidatesTokenCount: usageMetadata ? toNumber(usageMetadata.candidatesTokenCount) : null,
+    thoughtsTokenCount: usageMetadata ? toNumber(usageMetadata.thoughtsTokenCount) : null,
     totalTokenCount: usageMetadata ? toNumber(usageMetadata.totalTokenCount) : null,
   };
 }
@@ -329,6 +332,7 @@ export async function POST(req: Request) {
       finishReason: null,
       promptTokenCount: null,
       candidatesTokenCount: null,
+      thoughtsTokenCount: null,
       totalTokenCount: null,
     };
     let outputSummary = summarizeRawOutput("");
@@ -337,6 +341,7 @@ export async function POST(req: Request) {
       finishReason: responseMeta.finishReason,
       promptTokenCount: responseMeta.promptTokenCount,
       candidatesTokenCount: responseMeta.candidatesTokenCount,
+      thoughtsTokenCount: responseMeta.thoughtsTokenCount,
       totalTokenCount: responseMeta.totalTokenCount,
       startsWithBrace: outputSummary.startsWithBrace,
       endsWithBrace: outputSummary.endsWithBrace,
@@ -375,6 +380,7 @@ export async function POST(req: Request) {
         finishReason: responseMeta.finishReason,
         promptTokenCount: responseMeta.promptTokenCount,
         candidatesTokenCount: responseMeta.candidatesTokenCount,
+        thoughtsTokenCount: responseMeta.thoughtsTokenCount,
         totalTokenCount: responseMeta.totalTokenCount,
         startsWithBrace: outputSummary.startsWithBrace,
         endsWithBrace: outputSummary.endsWithBrace,

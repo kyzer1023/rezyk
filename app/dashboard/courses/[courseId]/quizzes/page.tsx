@@ -20,7 +20,6 @@ export default function QuizzesPage({ params }: { params: Promise<{ courseId: st
   const { bootstrap } = useDashboardBootstrapContext();
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const lastAppliedSyncAtRef = useRef(0);
 
   const loadQuizzes = useCallback(async () => {
@@ -69,42 +68,17 @@ export default function QuizzesPage({ params }: { params: Promise<{ courseId: st
     void refreshFromBootstrap();
   }, [bootstrap?.lastAutoSyncAt, loadQuizzes, loading]);
 
-  async function syncQuizzes() {
-    setSyncing(true);
-    try {
-      await fetch("/api/sync/quiz", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ courseId }),
-      });
-      await loadQuizzes();
-    } catch {
-      // silent
-    }
-    setSyncing(false);
-  }
-
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+      <div style={{ marginBottom: 4 }}>
         <h1 className="edu-heading edu-fade-in" style={{ fontSize: 22, marginBottom: 0 }}>
           Quiz Assignments
         </h1>
-        <button
-          className="edu-btn-outline"
-          style={{ fontSize: 12, padding: "6px 14px" }}
-          onClick={syncQuizzes}
-          disabled={syncing}
-        >
-          {syncing ? "Syncing..." : "Refresh Quizzes"}
-        </button>
       </div>
       <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 20 }}>
         {loading
           ? "Loading quizzes..."
-          : syncing
-            ? "Syncing quizzes from Google Classroom..."
-            : `${quizzes.length} quiz(es) with linked Google Forms`}
+          : `${quizzes.length} quiz(es) with linked Google Forms`}
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -143,9 +117,7 @@ export default function QuizzesPage({ params }: { params: Promise<{ courseId: st
         {!loading && quizzes.length === 0 && (
           <div className="edu-card" style={{ padding: 32, textAlign: "center" }}>
             <p className="edu-muted" style={{ marginBottom: 12 }}>
-              {syncing
-                ? "Syncing quizzes..."
-                : "No quiz assignments found for this course yet. Use Refresh Quizzes above to try again."}
+              No quiz assignments found for this course yet.
             </p>
           </div>
         )}

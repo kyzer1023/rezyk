@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/loading-states";
 import ConceptHeatmap from "@/lib/charts/ConceptHeatmap";
 import RiskDistribution from "@/lib/charts/RiskDistribution";
+import StudentNoteCard from "@/components/notes/StudentNoteCard";
+import type { BatchCategoryFilter, SavedStudentNote } from "@/lib/analysis/student-notes-schema";
 
 interface SyncStep {
   id: string;
@@ -103,6 +105,13 @@ interface StudentAnalysis {
   rationale: string;
 }
 
+interface BatchGenerationResult {
+  generated: number;
+  failed: number;
+  total: number;
+  results: Array<{ studentId: string; status: "success" | "error"; error?: string }>;
+}
+
 const RISK_COLORS: Record<StudentRiskLevel, { bg: string; color: string }> = {
   critical: { bg: "#FDECEA", color: "#A63D2E" },
   high: { bg: "#FEF4E5", color: "#A25E1A" },
@@ -187,6 +196,42 @@ function toApiErrorMessage(payload: unknown, fallback: string): string {
   }
 
   return fallback;
+}
+
+function toReadableGenerationError(rawError: string | undefined, fallback: string): string {
+  if (!rawError) return fallback;
+  const normalized = rawError.replace(/\s+/g, " ").trim();
+  if (!normalized) return fallback;
+
+  try {
+    const parsed = JSON.parse(normalized) as { error?: { message?: string; status?: string } };
+    if (parsed?.error) {
+      const message =
+        typeof parsed.error.message === "string" && parsed.error.message.trim().length > 0
+          ? parsed.error.message.trim()
+          : "";
+      const status =
+        typeof parsed.error.status === "string" && parsed.error.status.trim().length > 0
+          ? parsed.error.status.trim()
+          : "";
+      const combined = `${message}${status ? ` (${status})` : ""}`.trim();
+      if (combined.length > 0) {
+        return combined;
+      }
+    }
+  } catch {
+    // Keep best-effort parsing silent and fallback to pattern matching.
+  }
+
+  if (/UNAVAILABLE|RESOURCE_EXHAUSTED|high demand|rate limit|quota|429|503/i.test(normalized)) {
+    return "Model is temporarily busy. Please retry in about a minute.";
+  }
+
+  if (/network|timeout|timed out|ECONNRESET|ETIMEDOUT/i.test(normalized)) {
+    return "Temporary network issue during generation. Please retry.";
+  }
+
+  return normalized.length > 220 ? `${normalized.slice(0, 217)}...` : normalized;
 }
 
 export function QuizSyncPanel({ courseId, quizId }: { courseId: string; quizId: string }) {
@@ -926,6 +971,11 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
   const [emailMap, setEmailMap] = useState<Record<string, string>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [batchGenerating, setBatchGenerating] = useState(false);
+  const [batchFilter, setBatchFilter] = useState<BatchCategoryFilter>("critical+high");
+  const [batchResult, setBatchResult] = useState<BatchGenerationResult | null>(null);
+  const [batchError, setBatchError] = useState<string | null>(null);
+  const [showBatchDialog, setShowBatchDialog] = useState(false);
 
   const loadStudents = useCallback(async (mode: "initial" | "refresh" = "initial") => {
     if (mode === "refresh") {
@@ -988,6 +1038,47 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
     { value: "low", label: "Low" },
   ];
 
+  const getDisplayName = useCallback((id: string): string => {
+    const email = emailMap[id] ?? id;
+    return email.split("@")[0].replace(/[._]/g, " ");
+  }, [emailMap]);
+
+  async function runBatchGenerate() {
+    setBatchGenerating(true);
+    setBatchResult(null);
+    setBatchError(null);
+    try {
+      const response = await fetch("/api/notes/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId, quizId, categoryFilter: batchFilter }),
+      });
+      const payload = (await response.json()) as {
+        error?: string;
+        generated?: number;
+        failed?: number;
+        total?: number;
+        results?: BatchGenerationResult["results"];
+      };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Batch generation failed");
+      }
+
+      setBatchResult({
+        generated: payload.generated ?? 0,
+        failed: payload.failed ?? 0,
+        total: payload.total ?? 0,
+        results: payload.results ?? [],
+      });
+    } catch (runError) {
+      const message = runError instanceof Error ? runError.message : "Batch generation failed";
+      setBatchError(toReadableGenerationError(message, "Batch generation failed"));
+    } finally {
+      setBatchGenerating(false);
+      setShowBatchDialog(false);
+    }
+  }
+
   if (loading) {
     return (
       <div>
@@ -1045,17 +1136,128 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
     <div>
       <div className="edu-fade-in" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h1 className="edu-heading" style={{ fontSize: 22, margin: 0 }}>Students</h1>
-        <button
-          className="edu-btn-outline"
-          style={{ fontSize: 13, padding: "8px 16px" }}
-          onClick={() => {
-            void loadStudents("refresh");
-          }}
-          disabled={refreshing}
-        >
-          {refreshing ? "Refreshing..." : "Refresh Students"}
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            className="edu-btn"
+            style={{ fontSize: 13, padding: "8px 16px" }}
+            onClick={() => setShowBatchDialog(true)}
+            disabled={batchGenerating}
+          >
+            {batchGenerating ? "Generating Notes..." : "Batch Generate Notes"}
+          </button>
+          <button
+            className="edu-btn-outline"
+            style={{ fontSize: 13, padding: "8px 16px" }}
+            onClick={() => {
+              void loadStudents("refresh");
+            }}
+            disabled={refreshing}
+          >
+            {refreshing ? "Refreshing..." : "Refresh Students"}
+          </button>
+        </div>
       </div>
+
+      {showBatchDialog && (
+        <div className="edu-card edu-fade-in" style={{ padding: 20, marginBottom: 16, background: "#FCF8F3" }}>
+          <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Batch Generate Asset Notes</p>
+          <p style={{ fontSize: 12, color: "#6D6154", marginBottom: 12 }}>
+            Select which students to generate notes for:
+          </p>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+            {[
+              { value: "critical+high" as BatchCategoryFilter, label: "Critical + High (recommended)" },
+              { value: "critical" as BatchCategoryFilter, label: "Critical only" },
+              { value: "high" as BatchCategoryFilter, label: "High only" },
+              { value: "medium" as BatchCategoryFilter, label: "Medium" },
+              { value: "low" as BatchCategoryFilter, label: "Low" },
+              { value: "all" as BatchCategoryFilter, label: "All students" },
+            ].map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setBatchFilter(option.value)}
+                style={{
+                  padding: "5px 12px",
+                  borderRadius: 16,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  border: batchFilter === option.value ? "1.5px solid #6E4836" : "1.5px solid #E8DFD4",
+                  background: batchFilter === option.value ? "#6E4836" : "#FFF",
+                  color: batchFilter === option.value ? "#FFF" : "#6D6154",
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              className="edu-btn"
+              style={{ fontSize: 12 }}
+              onClick={() => {
+                void runBatchGenerate();
+              }}
+              disabled={batchGenerating}
+            >
+              {batchGenerating ? "Generating..." : "Generate"}
+            </button>
+            <button className="edu-btn-outline" style={{ fontSize: 12 }} onClick={() => setShowBatchDialog(false)}>
+              Cancel
+            </button>
+          </div>
+          <p style={{ fontSize: 11, color: "#8A7D6F", marginTop: 8, fontStyle: "italic" }}>
+            AI-generated drafts | review before sharing
+          </p>
+        </div>
+      )}
+
+      {batchResult && (
+        <div
+          className="edu-card edu-fade-in"
+          style={{
+            padding: 16,
+            marginBottom: 16,
+            background: batchResult.failed > 0 ? "#FEF8E7" : "#E9F3E5",
+          }}
+        >
+          <p
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: batchResult.failed > 0 ? "#8B6914" : "#3D7A2E",
+              marginBottom: 4,
+            }}
+          >
+            Batch Complete: {batchResult.generated} generated, {batchResult.failed} failed after automatic retries
+          </p>
+          {batchResult.failed > 0 ? (
+            <div style={{ marginTop: 8 }}>
+              <p style={{ fontSize: 11, color: "#8A7D6F", margin: "0 0 4px" }}>
+                Remaining failures below could not be recovered after retry attempts:
+              </p>
+              {batchResult.results
+                .filter((entry) => entry.status === "error")
+                .map((entry) => (
+                  <p key={entry.studentId} style={{ fontSize: 11, color: "#A63D2E", margin: "2px 0" }}>
+                    {getDisplayName(entry.studentId)}: {toReadableGenerationError(entry.error, "Generation failed")}
+                  </p>
+                ))}
+            </div>
+          ) : null}
+          <button
+            className="edu-btn-outline"
+            style={{ fontSize: 11, padding: "3px 10px", marginTop: 8 }}
+            onClick={() => setBatchResult(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {batchError ? (
+        <p style={{ marginBottom: 12, fontSize: 12, color: "#A63D2E" }}>{batchError}</p>
+      ) : null}
 
       {loadError && (
         <p style={{ marginBottom: 12, fontSize: 12, color: "#A25E1A" }}>
@@ -1107,8 +1309,7 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
             <tbody>
               {sorted.map((student, index) => {
                 const risk = RISK_COLORS[student.riskLevel] ?? RISK_COLORS.low;
-                const email = emailMap[student.studentId] ?? student.studentId;
-                const displayName = email.split("@")[0].replace(/[._]/g, " ");
+                const displayName = getDisplayName(student.studentId);
                 const score = deriveScore(student.riskLevel, student.misconceptions.length);
                 return (
                   <tr
@@ -1173,6 +1374,10 @@ export function QuizStudentDetailPanel({
   const [loading, setLoading] = useState(true);
   const [emailMap, setEmailMap] = useState<Record<string, string>>({});
   const [allStudents, setAllStudents] = useState<StudentAnalysis[]>([]);
+  const [generatingNote, setGeneratingNote] = useState(false);
+  const [savedNote, setSavedNote] = useState<SavedStudentNote | null>(null);
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const [showAssetModal, setShowAssetModal] = useState(false);
 
   useEffect(() => {
     fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quizId}`)
@@ -1193,6 +1398,79 @@ export function QuizStudentDetailPanel({
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [courseId, quizId, studentId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSavedNote() {
+      try {
+        const response = await fetch(
+          `/api/notes?courseId=${courseId}&quizId=${quizId}&studentId=${studentId}`,
+          { cache: "no-store" },
+        );
+        if (!response.ok) return;
+        const payload = (await response.json()) as { notes?: SavedStudentNote[] };
+        if (!cancelled) {
+          const [firstNote] = payload.notes ?? [];
+          setSavedNote(firstNote ?? null);
+        }
+      } catch {
+        // silent
+      }
+    }
+
+    void loadSavedNote();
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId, quizId, studentId]);
+
+  useEffect(() => {
+    if (!showAssetModal) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowAssetModal(false);
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [showAssetModal]);
+
+  async function generateNote() {
+    setGeneratingNote(true);
+    setNoteError(null);
+    try {
+      const response = await fetch("/api/notes/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId, quizId, studentId }),
+      });
+      const payload = (await response.json()) as {
+        error?: string;
+        note?: SavedStudentNote;
+      };
+
+      if (!response.ok || !payload.note) {
+        throw new Error(payload.error ?? "Failed to generate note");
+      }
+
+      setSavedNote(payload.note);
+      setShowAssetModal(true);
+    } catch (generateError) {
+      const message = generateError instanceof Error ? generateError.message : "Failed to generate note";
+      setNoteError(toReadableGenerationError(message, "Failed to generate note"));
+    } finally {
+      setGeneratingNote(false);
+    }
+  }
 
   if (loading) return <p className="edu-muted">Loading student details...</p>;
   if (!student) {
@@ -1223,6 +1501,27 @@ export function QuizStudentDetailPanel({
     .sort((entryA, entryB) => riskOrder.indexOf(entryA.riskLevel) - riskOrder.indexOf(entryB.riskLevel));
   const currentIndex = atRisk.findIndex((entry) => entry.studentId === studentId);
   const nextStudent = currentIndex >= 0 && currentIndex < atRisk.length - 1 ? atRisk[currentIndex + 1] : atRisk[0];
+  const hasGeneratedAsset = savedNote?.status === "success" && Boolean(savedNote.note);
+  const hasFailedAsset = savedNote?.status === "error";
+  const persistedNoteError = hasFailedAsset
+    ? toReadableGenerationError(savedNote?.error, "Previous asset generation failed.")
+    : null;
+  const activeNoteError = noteError ?? persistedNoteError;
+  const assetActionLabel = generatingNote
+    ? "Generating Asset..."
+    : hasGeneratedAsset
+      ? "View Asset"
+      : hasFailedAsset
+        ? "Retry Asset"
+        : "Generate Asset";
+
+  function handleAssetAction() {
+    if (hasGeneratedAsset) {
+      setShowAssetModal(true);
+      return;
+    }
+    void generateNote();
+  }
 
   return (
     <div>
@@ -1271,19 +1570,34 @@ export function QuizStudentDetailPanel({
             </p>
           </div>
         </div>
-        <span
-          style={{
-            fontSize: 12,
-            fontWeight: 600,
-            padding: "5px 14px",
-            borderRadius: 6,
-            background: risk.bg,
-            color: risk.color,
-            textTransform: "lowercase",
-          }}
-        >
-          {student.riskLevel} risk
-        </span>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              padding: "5px 14px",
+              borderRadius: 6,
+              background: risk.bg,
+              color: risk.color,
+              textTransform: "lowercase",
+            }}
+          >
+            {student.riskLevel} risk
+          </span>
+          <button
+            className="edu-btn-outline"
+            onClick={handleAssetAction}
+            disabled={generatingNote}
+            style={{ fontSize: 12, padding: "4px 12px" }}
+          >
+            {assetActionLabel}
+          </button>
+          {activeNoteError ? (
+            <p style={{ margin: 0, maxWidth: 280, textAlign: "right", fontSize: 11, color: "#A63D2E" }}>
+              {activeNoteError}
+            </p>
+          ) : null}
+        </div>
       </div>
 
       <div className="edu-card edu-fade-in edu-fd1" style={{ padding: 24, marginBottom: 14 }}>
@@ -1324,7 +1638,7 @@ export function QuizStudentDetailPanel({
         ))}
       </div>
 
-      <div className="edu-card edu-fade-in edu-fd2" style={{ padding: 24, marginBottom: 20 }}>
+      <div className="edu-card edu-fade-in edu-fd2" style={{ padding: 24, marginBottom: 14 }}>
         <h3 className="edu-heading" style={{ fontSize: 16, marginBottom: 14, fontWeight: 700 }}>
           Interventions
         </h3>
@@ -1361,7 +1675,63 @@ export function QuizStudentDetailPanel({
         ))}
       </div>
 
-      <div style={{ display: "flex", gap: 10 }}>
+      {showAssetModal && savedNote ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Generated student asset"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(34, 25, 18, 0.38)",
+            zIndex: 40,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+          }}
+          onClick={() => setShowAssetModal(false)}
+        >
+          <div
+            className="edu-card"
+            style={{
+              width: "min(900px, 100%)",
+              maxHeight: "88vh",
+              overflow: "hidden",
+              padding: 20,
+              background: "#FFFDF9",
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div>
+                <h3 className="edu-heading" style={{ fontSize: 17, margin: 0 }}>
+                  Student Asset
+                </h3>
+                <p className="edu-muted" style={{ fontSize: 12, margin: "3px 0 0", textTransform: "capitalize" }}>
+                  {displayName}
+                </p>
+              </div>
+              <button
+                className="edu-btn-outline"
+                style={{ fontSize: 12, padding: "4px 12px" }}
+                onClick={() => setShowAssetModal(false)}
+              >
+                Close
+              </button>
+            </div>
+            <div style={{ maxHeight: "72vh", overflowY: "auto", paddingRight: 4 }}>
+              <StudentNoteCard
+                note={savedNote}
+                onRegenerate={generateNote}
+                regenerating={generatingNote}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
         {nextStudent && nextStudent.studentId !== studentId && (
           <Link href={routes.quizWorkspace(courseId, quizId, { view: "students", studentId: nextStudent.studentId })}>
             <button className="edu-btn">Next At-Risk Student</button>
