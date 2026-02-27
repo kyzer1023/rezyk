@@ -14,7 +14,7 @@ interface Course {
 }
 
 export default function CoursesPage() {
-  const { bootstrap, runningBootstrap, runBootstrap } =
+  const { bootstrap, runningBootstrap } =
     useDashboardBootstrapContext();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,14 +63,6 @@ export default function CoursesPage() {
     }
     void refreshFromBootstrap();
   }, [bootstrap?.lastAutoSyncAt, loadCourses, loading]);
-
-  async function syncCourses() {
-    try {
-      await runBootstrap("refresh");
-    } catch {
-      // silent
-    }
-  }
 
   return (
     <div>
@@ -126,11 +118,8 @@ export default function CoursesPage() {
           <p className="edu-muted" style={{ marginBottom: 14 }}>
             {bootstrap?.bootstrapStatus === "syncing" || runningBootstrap
               ? "Preparing your courses. This usually takes less than a minute."
-              : "No courses found. Refresh from Classroom to get started."}
+              : "No courses found yet. Use the top refresh control to sync from Classroom."}
           </p>
-          <button className="edu-btn" onClick={syncCourses} disabled={runningBootstrap}>
-            {runningBootstrap ? "Refreshing..." : "Retry Sync"}
-          </button>
           {bootstrap?.lastBootstrapError && (
             <p style={{ fontSize: 12, color: "#A63D2E", marginTop: 10 }}>
               {bootstrap.lastBootstrapError}

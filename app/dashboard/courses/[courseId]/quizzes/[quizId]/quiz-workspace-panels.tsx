@@ -873,23 +873,11 @@ export function QuizInsightsPanel({ courseId, quizId }: { courseId: string; quiz
         <h1 className="edu-heading" style={{ fontSize: 22, margin: 0 }}>
           Class Insights
         </h1>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            className="edu-btn-outline"
-            style={{ fontSize: 13, padding: "8px 18px" }}
-            onClick={() => {
-              void loadAnalysis("refresh");
-            }}
-            disabled={refreshing}
-          >
-            {refreshing ? "Refreshing..." : "Refresh Insights"}
+        <Link href={routes.quizWorkspace(courseId, quizId, { view: "students" })}>
+          <button className="edu-btn" style={{ fontSize: 13, padding: "8px 18px" }}>
+            View Students
           </button>
-          <Link href={routes.quizWorkspace(courseId, quizId, { view: "students" })}>
-            <button className="edu-btn" style={{ fontSize: 13, padding: "8px 18px" }}>
-              View Students
-            </button>
-          </Link>
-        </div>
+        </Link>
       </div>
 
       {loadError && (
@@ -1136,26 +1124,14 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
     <div>
       <div className="edu-fade-in" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h1 className="edu-heading" style={{ fontSize: 22, margin: 0 }}>Students</h1>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            className="edu-btn"
-            style={{ fontSize: 13, padding: "8px 16px" }}
-            onClick={() => setShowBatchDialog(true)}
-            disabled={batchGenerating}
-          >
-            {batchGenerating ? "Generating Notes..." : "Batch Generate Notes"}
-          </button>
-          <button
-            className="edu-btn-outline"
-            style={{ fontSize: 13, padding: "8px 16px" }}
-            onClick={() => {
-              void loadStudents("refresh");
-            }}
-            disabled={refreshing}
-          >
-            {refreshing ? "Refreshing..." : "Refresh Students"}
-          </button>
-        </div>
+        <button
+          className="edu-btn"
+          style={{ fontSize: 13, padding: "8px 16px" }}
+          onClick={() => setShowBatchDialog(true)}
+          disabled={batchGenerating}
+        >
+          {batchGenerating ? "Generating Notes..." : "Batch Generate Notes"}
+        </button>
       </div>
 
       {showBatchDialog && (
