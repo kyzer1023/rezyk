@@ -4,10 +4,10 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 /* ═══════════════════════════════════════════════════════════════════
-   RENDITION 4 — Dark Luxury
-   Direction: Deep charcoal/near-black, gold/amber accents, dramatic
-   staggered entrance animations, glass-morphism cards, high contrast
-   typography, radial gradient spotlights, editorial authority.
+   RENDITION 5 — Playful / Modern
+   Direction: Vibrant coral + teal accents on warm cream, bouncy spring
+   animations, oversized rounded cards, emoji-driven iconography,
+   confetti-dot backgrounds, bold sans-serif, sticker-like badges.
    ═══════════════════════════════════════════════════════════════════ */
 
 function useVis(ref: React.RefObject<HTMLElement | null>) {
@@ -15,54 +15,62 @@ function useVis(ref: React.RefObject<HTMLElement | null>) {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const o = new IntersectionObserver(([e]) => { if (e.isIntersecting) setV(true); }, { threshold: 0.12 });
+    const o = new IntersectionObserver(([e]) => { if (e.isIntersecting) setV(true); }, { threshold: 0.1 });
     o.observe(el);
     return () => o.disconnect();
   }, [ref]);
   return v;
 }
 
-function Reveal({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
+function Pop({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const v = useVis(ref);
   return (
-    <div ref={ref} style={{ opacity: v ? 1 : 0, transform: v ? "translateY(0)" : "translateY(40px)", transition: `all 0.75s cubic-bezier(.16,1,.3,1) ${delay}s` }}>
+    <div ref={ref} style={{
+      opacity: v ? 1 : 0,
+      transform: v ? "translateY(0) scale(1)" : "translateY(24px) scale(0.92)",
+      transition: `all 0.55s cubic-bezier(.34,1.56,.64,1) ${delay}s`,
+    }}>
       {children}
     </div>
   );
 }
 
-const BG = "#141210";
-const SURFACE = "#1c1a17";
-const BORDER = "rgba(193,161,107,0.12)";
-const GOLD = "#C1A16B";
-const AMBER = "#D4956E";
-const TEXT = "#E8E0D4";
-const MUTED = "rgba(232,224,212,0.4)";
+const CORAL = "#E07A5F";
+const TEAL = "#3D8B7A";
+const CREAM = "#FFF8F0";
+const WARM = "#F5EDE3";
+const DARK = "#2D2926";
 
-function GlassMock() {
+function FunMock() {
   return (
-    <div style={{ background: "rgba(255,255,255,0.04)", backdropFilter: "blur(20px)", border: `1px solid ${BORDER}`, borderRadius: 16, padding: 24, maxWidth: 480, width: "100%", boxShadow: "0 32px 64px rgba(0,0,0,0.4)" }}>
-      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+    <div style={{ background: "#fff", borderRadius: 28, padding: 24, border: "3px solid #f0ece5", boxShadow: "0 16px 48px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.02)", maxWidth: 440, width: "100%", position: "relative" }}>
+      <div style={{ position: "absolute", top: -12, right: 20, background: CORAL, color: "#fff", padding: "4px 14px", borderRadius: 20, fontSize: 11, fontWeight: 700 }}>LIVE</div>
+      <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
         {[
-          { v: "6", l: "At-Risk", c: "#E85D4A" },
-          { v: "68%", l: "Avg Score", c: GOLD },
-          { v: "12", l: "Concepts", c: "#6B8E5C" },
+          { emoji: "🎯", value: "6", label: "At Risk", bg: "#FFF0EC" },
+          { emoji: "📈", value: "72%", label: "Average", bg: "#EEFBF6" },
+          { emoji: "💡", value: "12", label: "Insights", bg: "#FFF6E8" },
         ].map((s) => (
-          <div key={s.l} style={{ flex: 1, padding: "14px 0", textAlign: "center", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: `1px solid ${BORDER}` }}>
-            <div style={{ fontSize: 24, fontWeight: 800, color: s.c, fontFamily: "Georgia, serif" }}>{s.v}</div>
-            <div style={{ fontSize: 9, color: MUTED, letterSpacing: 1.5, marginTop: 4, textTransform: "uppercase" }}>{s.l}</div>
+          <div key={s.label} style={{ flex: 1, padding: "16px 10px", borderRadius: 18, background: s.bg, textAlign: "center" }}>
+            <div style={{ fontSize: 20, marginBottom: 4 }}>{s.emoji}</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: DARK }}>{s.value}</div>
+            <div style={{ fontSize: 10, color: "#8a7d6f", marginTop: 2 }}>{s.label}</div>
           </div>
         ))}
       </div>
-      <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.06)", overflow: "hidden", marginBottom: 16 }}>
-        <div style={{ width: "72%", height: "100%", borderRadius: 3, background: `linear-gradient(90deg, ${GOLD}, ${AMBER})` }} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {[
+          { name: "Alex M.", status: "Critical", bg: "#FFF0EC", color: CORAL, emoji: "🔴" },
+          { name: "Sarah J.", status: "At Risk", bg: "#FFF6E8", color: "#C17A56", emoji: "🟡" },
+          { name: "David L.", status: "On Track", bg: "#EEFBF6", color: TEAL, emoji: "🟢" },
+        ].map((s) => (
+          <div key={s.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 14, background: s.bg }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: DARK }}>{s.emoji} {s.name}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: s.color }}>{s.status}</span>
+          </div>
+        ))}
       </div>
-      {["Alex M. — Critical", "Sarah J. — At Risk", "David L. — On Track"].map((s, i) => (
-        <div key={s} style={{ padding: "8px 0", borderBottom: i < 2 ? `1px solid ${BORDER}` : "none", fontSize: 12, color: "rgba(232,224,212,0.3)", fontFamily: "'Courier New', monospace" }}>
-          {s}
-        </div>
-      ))}
     </div>
   );
 }
@@ -88,144 +96,154 @@ export default function LandingPage() {
 
   if (checking) {
     return (
-      <div style={{ minHeight: "100vh", background: BG, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ width: 24, height: 24, border: `2px solid rgba(193,161,107,0.2)`, borderTopColor: GOLD, borderRadius: "50%", animation: "spin .7s linear infinite" }} />
+      <div style={{ minHeight: "100vh", background: CREAM, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: 32, height: 32, border: "4px solid #f0ece5", borderTopColor: CORAL, borderRadius: "50%", animation: "spin .6s linear infinite" }} />
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       </div>
     );
   }
 
   return (
-    <div style={{ background: BG, color: TEXT, minHeight: "100vh" }}>
+    <div style={{ background: CREAM, minHeight: "100vh" }}>
       <style>{`
         @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
-        @keyframes heroGlow{0%,100%{opacity:0.15}50%{opacity:0.25}}
+        @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+        @keyframes wiggle{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
       `}</style>
 
+      {/* ─── NAV ─── */}
+      <nav style={{ padding: "20px 48px", display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: 1200, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 12, background: `linear-gradient(135deg, ${CORAL}, ${TEAL})`, display: "flex", alignItems: "center", justifyContent: "center", animation: "wiggle 3s ease-in-out infinite" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+            </svg>
+          </div>
+          <span style={{ fontSize: 20, fontWeight: 800, color: DARK }}>EduInsight AI</span>
+        </div>
+        <a href="/api/auth/login" style={{ textDecoration: "none", background: CORAL, color: "#fff", padding: "12px 28px", borderRadius: 14, fontSize: 14, fontWeight: 700, boxShadow: `0 4px 14px rgba(224,122,95,0.3)` }}>
+          🚀 Get Started
+        </a>
+      </nav>
+
       {/* ─── HERO ─── */}
-      <section style={{ position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", top: "-20%", right: "-10%", width: 600, height: 600, borderRadius: "50%", background: `radial-gradient(circle, rgba(193,161,107,0.08) 0%, transparent 70%)`, animation: "heroGlow 5s ease-in-out infinite", pointerEvents: "none" }} />
-
-        <nav style={{ padding: "24px 48px", display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: 1200, margin: "0 auto", position: "relative", zIndex: 2 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 6, border: `1.5px solid ${GOLD}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-              </svg>
-            </div>
-            <span style={{ fontSize: 16, fontWeight: 700, color: GOLD, letterSpacing: 1 }}>EDUINSIGHT</span>
+      <section style={{ maxWidth: 1200, margin: "0 auto", padding: "48px 48px 80px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center" }}>
+        <div>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 16px", borderRadius: 20, background: "#EEFBF6", border: `1.5px solid ${TEAL}`, marginBottom: 20 }}>
+            <span style={{ fontSize: 14 }}>✨</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: TEAL }}>Powered by Gemini AI</span>
           </div>
-          <a href="/api/auth/login" style={{ textDecoration: "none", border: `1.5px solid ${GOLD}`, color: GOLD, padding: "10px 24px", borderRadius: 6, fontSize: 12, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase" }}>
-            Sign In
-          </a>
-        </nav>
-
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "80px 48px 100px", display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 60, alignItems: "center", position: "relative", zIndex: 2 }}>
-          <div>
-            <div style={{ width: 48, height: 2, background: `linear-gradient(90deg, ${GOLD}, transparent)`, marginBottom: 28 }} />
-            <h1 style={{ fontFamily: "Georgia, serif", fontSize: 56, lineHeight: 1.08, fontWeight: 700, color: TEXT, margin: "0 0 24px", letterSpacing: -1.5 }}>
-              Intelligence for<br />every classroom.
-            </h1>
-            <p style={{ fontSize: 17, lineHeight: 1.8, color: MUTED, maxWidth: 440, marginBottom: 36 }}>
-              AI-powered quiz analytics that decode misconceptions, stratify risk, and generate
-              actionable interventions — from your Google Classroom data.
-            </p>
-            <a href="/api/auth/login" style={{ textDecoration: "none", background: `linear-gradient(135deg, ${GOLD}, ${AMBER})`, color: BG, padding: "16px 32px", borderRadius: 8, fontSize: 15, fontWeight: 700, display: "inline-block", letterSpacing: 0.5 }}>
-              Get Started Free →
+          <h1 style={{ fontSize: 52, lineHeight: 1.12, fontWeight: 900, color: DARK, margin: "0 0 20px" }}>
+            Make every quiz a <span style={{ color: CORAL, textDecoration: "underline", textDecorationStyle: "wavy", textDecorationColor: CORAL, textUnderlineOffset: "6px" }}>teaching moment</span>
+          </h1>
+          <p style={{ fontSize: 17, lineHeight: 1.75, color: "#7a7064", maxWidth: 440, marginBottom: 32 }}>
+            Transform Google Classroom quiz data into personalized learning insights.
+            Know exactly which concepts each student struggles with — and why.
+          </p>
+          <div style={{ display: "flex", gap: 12 }}>
+            <a href="/api/auth/login" style={{ textDecoration: "none", background: `linear-gradient(135deg, ${CORAL}, #D06A4F)`, color: "#fff", padding: "16px 32px", borderRadius: 16, fontSize: 16, fontWeight: 700, display: "inline-block", boxShadow: `0 8px 24px rgba(224,122,95,0.3)` }}>
+              Start Free with Google →
             </a>
-            <p style={{ fontSize: 10, color: "rgba(232,224,212,0.2)", marginTop: 16, letterSpacing: 1.5 }}>SECURE · READ-ONLY · SDG 4 ALIGNED</p>
           </div>
-          <div style={{ display: "flex", justifyContent: "center" }}>
-            <GlassMock />
+          <div style={{ display: "flex", gap: 16, marginTop: 24 }}>
+            {["🔒 Secure", "👁️ Read-only", "🌍 SDG 4"].map((t) => (
+              <span key={t} style={{ fontSize: 12, color: "#8a7d6f", fontWeight: 500 }}>{t}</span>
+            ))}
           </div>
+        </div>
+        <div style={{ display: "flex", justifyContent: "center", animation: "bounce 3s ease-in-out infinite" }}>
+          <FunMock />
         </div>
       </section>
 
       {/* ─── CAPABILITIES ─── */}
-      <section style={{ borderTop: `1px solid ${BORDER}` }}>
+      <section style={{ background: "#fff", borderRadius: "40px 40px 0 0" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: "80px 48px", textAlign: "center" }}>
-          <Reveal>
-            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: 4, color: GOLD, marginBottom: 8 }}>SYSTEM CAPABILITIES</p>
-            <h2 style={{ fontFamily: "Georgia, serif", fontSize: 38, color: TEXT, margin: "0 0 48px" }}>Pedagogical Intelligence</h2>
-          </Reveal>
+          <Pop>
+            <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: 2, color: TEAL, textTransform: "uppercase" }}>System Capabilities</span>
+            <h2 style={{ fontSize: 40, fontWeight: 900, color: DARK, margin: "8px 0 12px" }}>Pedagogical Intelligence 🧠</h2>
+            <p style={{ fontSize: 15, color: "#8a7d6f", maxWidth: 480, margin: "0 auto 48px" }}>Automated insights derived from psychometric analysis.</p>
+          </Pop>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
             {[
-              { tag: "α.", title: "Misconception Decoding", desc: "Analyzes distractor choices to pinpoint exactly why a student failed." },
-              { tag: "β.", title: "Risk Stratification", desc: "Identifies students at risk of falling behind weeks before grades reflect it." },
-              { tag: "γ.", title: "Curriculum Heatmaps", desc: "Visualize concept mastery across your class. Spot systemic gaps instantly." },
+              { emoji: "🔬", title: "Misconception Decoding", desc: "Our engine analyzes distractor choices to pinpoint exactly why a student failed.", bg: "#FFF6E8" },
+              { emoji: "📊", title: "Risk Stratification", desc: "Predictive modeling identifies at-risk students before their grades reflect it.", bg: "#FFF0EC" },
+              { emoji: "🗺️", title: "Curriculum Heatmaps", desc: "Visualize concept mastery across your class. Spot systemic gaps instantly.", bg: "#EEFBF6" },
             ].map((c, i) => (
-              <Reveal key={c.tag} delay={i * 0.12}>
-                <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: "36px 24px", textAlign: "left", height: "100%" }}>
-                  <span style={{ fontFamily: "Georgia, serif", fontSize: 22, color: GOLD, fontWeight: 700 }}>{c.tag}</span>
-                  <h3 style={{ fontFamily: "Georgia, serif", fontSize: 20, color: TEXT, margin: "16px 0 10px" }}>{c.title}</h3>
-                  <p style={{ fontSize: 14, lineHeight: 1.65, color: MUTED }}>{c.desc}</p>
+              <Pop key={c.title} delay={i * 0.1}>
+                <div style={{ background: c.bg, borderRadius: 24, padding: "36px 24px", textAlign: "left", height: "100%", border: "2px solid rgba(0,0,0,0.04)" }}>
+                  <span style={{ fontSize: 36, display: "block", marginBottom: 14 }}>{c.emoji}</span>
+                  <h3 style={{ fontSize: 20, color: DARK, margin: "0 0 10px", fontWeight: 800 }}>{c.title}</h3>
+                  <p style={{ fontSize: 14, lineHeight: 1.65, color: "#7a7064", margin: 0 }}>{c.desc}</p>
                 </div>
-              </Reveal>
+              </Pop>
             ))}
           </div>
         </div>
       </section>
 
       {/* ─── BENTO ─── */}
-      <section style={{ borderTop: `1px solid ${BORDER}` }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "80px 48px" }}>
-          <Reveal>
-            <h2 style={{ fontFamily: "Georgia, serif", fontSize: 38, color: TEXT, textAlign: "center", margin: "0 0 48px" }}>From Data to Pedagogy</h2>
-          </Reveal>
+      <section style={{ background: "#fff" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 48px 80px" }}>
+          <Pop>
+            <h2 style={{ fontSize: 40, fontWeight: 900, color: DARK, textAlign: "center", margin: "0 0 48px" }}>From Data to Pedagogy 📖</h2>
+          </Pop>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             {[
-              { title: "Misconception Analysis", desc: "AI identifies patterns in incorrect answers to reveal root causes.", mock: <div style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${BORDER}`, borderRadius: 8, padding: "10px 14px", marginTop: 16, display: "flex", gap: 10, alignItems: "center" }}><span style={{ background: GOLD, color: BG, fontSize: 10, fontWeight: 800, padding: "3px 8px", borderRadius: 4 }}>Q3</span><span style={{ fontSize: 12, color: "rgba(232,224,212,0.5)" }}>42% selected &quot;B&quot; — confusing area with perimeter</span></div> },
-              { title: "Risk Stratification", desc: "Instantly see who is falling behind.", mock: <div style={{ marginTop: 16 }}>{[{n:"Alex M.",b:"CRITICAL",c:"#E85D4A"},{n:"Sarah J.",b:"AT RISK",c:GOLD},{n:"David L.",b:"ON TRACK",c:"#6B8E5C"}].map(s=><div key={s.n} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}><span style={{fontSize:13,color:TEXT}}>{s.n}</span><span style={{fontSize:9,fontWeight:700,padding:"3px 10px",borderRadius:4,border:`1px solid ${s.c}`,color:s.c}}>{s.b}</span></div>)}</div> },
-              { title: "Concept Heatmap", desc: "Visualize class performance across topic clusters.", mock: <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 4, marginTop: 16 }}>{["#6B8E5C","#7a9e5c","#5a7d4a","#C1A16B","#C17A56","#6B8E5C","#7a9e5c","#8aab64","#C17A56","#8aab64"].map((c,j)=><div key={j} style={{aspectRatio:"1",borderRadius:4,background:c,opacity:0.7}} />)}</div> },
-              { title: "Intervention Plans", desc: "Generated lesson plans and grouping strategies.", mock: <div style={{ background: "rgba(255,255,255,0.02)", borderLeft: `2px solid ${GOLD}`, borderRadius: "0 8px 8px 0", padding: "12px 14px", marginTop: 16 }}><p style={{ fontSize: 12, fontStyle: "italic", color: "rgba(232,224,212,0.5)", margin: 0, lineHeight: 1.6 }}>&quot;Group A needs a refresher on quadratic factoring.&quot;</p></div> },
+              { emoji: "⊙", title: "Misconception Analysis", desc: "AI reveals root causes of misunderstanding.", accent: CORAL,
+                mock: <div style={{ background: "#FFF6E8", borderRadius: 14, padding: "12px 14px", marginTop: 16, display: "flex", gap: 10, alignItems: "center" }}><span style={{ background: CORAL, color: "#fff", fontSize: 11, fontWeight: 800, padding: "4px 10px", borderRadius: 10 }}>Q3</span><div><p style={{ fontSize: 12, fontWeight: 700, color: DARK, margin: 0 }}>42% selected &quot;B&quot;</p><p style={{ fontSize: 11, color: "#8a7d6f", margin: "2px 0 0" }}>Confusing area with perimeter</p></div></div> },
+              { emoji: "⟁", title: "Student Risk Stratification", desc: "See who needs help right now.", accent: "#D06A4F",
+                mock: <div style={{ marginTop: 16, display: "flex", flexDirection: "column" as const, gap: 6 }}>{[{n:"Alex M.",e:"🔴",s:"Critical",c:CORAL},{n:"Sarah J.",e:"🟡",s:"At Risk",c:"#C17A56"},{n:"David L.",e:"🟢",s:"On Track",c:TEAL}].map(s=><div key={s.n} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",borderRadius:10,background:WARM}}><span style={{fontSize:13,color:DARK}}>{s.e} {s.n}</span><span style={{fontSize:10,fontWeight:700,color:s.c}}>{s.s}</span></div>)}</div> },
+              { emoji: "▦", title: "Concept Heatmap", desc: "Visualize class performance across topics.", accent: TEAL,
+                mock: <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5, marginTop: 16 }}>{["#6B8E5C","#8aab64","#6b8e4e","#c9a96e","#E07A5F","#6B8E5C","#8aab64","#a8c27a","#E07A5F","#8aab64"].map((c,j)=><div key={j} style={{aspectRatio:"1",borderRadius:10,background:c,opacity:0.85}} />)}</div> },
+              { emoji: "✎", title: "Intervention Plans", desc: "AI-generated teaching strategies.", accent: "#6B8E5C",
+                mock: <div style={{ background: "#EEFBF6", borderLeft: `4px solid ${TEAL}`, borderRadius: "0 14px 14px 0", padding: "14px 16px", marginTop: 16 }}><p style={{ fontSize: 13, fontStyle: "italic", color: "#3D8B7A", margin: 0, lineHeight: 1.6 }}>&quot;Group A needs a refresher on quadratic factoring. Try the Tile Method.&quot;</p></div> },
             ].map((f, i) => (
-              <Reveal key={f.title} delay={i * 0.1}>
-                <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 28, height: "100%" }}>
-                  <h3 style={{ fontSize: 20, color: TEXT, margin: "0 0 6px", fontWeight: 700 }}>{f.title}</h3>
-                  <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.6 }}>{f.desc}</p>
+              <Pop key={f.title} delay={i * 0.1}>
+                <div style={{ background: CREAM, borderRadius: 24, padding: 28, border: "2px solid #f0ece5", height: "100%" }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 14, background: "#fff", border: "2px solid #f0ece5", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14, fontSize: 20, color: f.accent }}>{f.emoji}</div>
+                  <h3 style={{ fontSize: 20, color: DARK, margin: "0 0 6px", fontWeight: 800 }}>{f.title}</h3>
+                  <p style={{ fontSize: 13, color: "#7a7064", lineHeight: 1.6, margin: 0 }}>{f.desc}</p>
                   {f.mock}
                 </div>
-              </Reveal>
+              </Pop>
             ))}
           </div>
         </div>
       </section>
 
       {/* ─── WORKFLOW ─── */}
-      <section style={{ borderTop: `1px solid ${BORDER}` }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "80px 48px", textAlign: "center" }}>
-          <Reveal>
-            <h2 style={{ fontFamily: "Georgia, serif", fontSize: 36, color: TEXT, fontStyle: "italic", margin: "0 0 48px" }}>Workflow Integration</h2>
-          </Reveal>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
-            {[
-              { n: "01", title: "CONNECT CLASSROOM", desc: "Sync rosters and quizzes via OAuth." },
-              { n: "02", title: "AUTOMATED SCAN", desc: "Engine maps answers against misconception patterns." },
-              { n: "03", title: "ACTIONABLE INSIGHTS", desc: "Grouped cohorts with reteaching strategies." },
-            ].map((s, i) => (
-              <Reveal key={s.n} delay={i * 0.12}>
-                <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: "32px 24px", textAlign: "left", position: "relative", borderTop: `2px solid ${GOLD}` }}>
-                  <span style={{ fontSize: 48, fontWeight: 800, color: "rgba(193,161,107,0.06)", position: "absolute", top: 12, right: 16, fontFamily: "'Courier New', monospace" }}>{s.n}</span>
-                  <h4 style={{ fontSize: 12, fontWeight: 700, letterSpacing: 2, color: GOLD, margin: "0 0 12px" }}>{s.title}</h4>
-                  <p style={{ fontSize: 13, lineHeight: 1.65, color: MUTED, margin: 0 }}>{s.desc}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
+      <section style={{ maxWidth: 1200, margin: "0 auto", padding: "80px 48px", textAlign: "center" }}>
+        <Pop>
+          <h2 style={{ fontSize: 38, fontWeight: 900, color: DARK, fontStyle: "italic", margin: "0 0 48px" }}>Workflow Integration ⚡</h2>
+        </Pop>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+          {[
+            { n: "1️⃣", title: "Connect Classroom", desc: "Sync rosters and quizzes with secure OAuth.", bg: `linear-gradient(135deg, ${CORAL}, #D06A4F)` },
+            { n: "2️⃣", title: "Automated Scan", desc: "Engine maps answers against misconception patterns.", bg: `linear-gradient(135deg, #8a7d6f, #6b6058)` },
+            { n: "3️⃣", title: "Actionable Insights", desc: "Grouped cohorts with reteaching strategies.", bg: `linear-gradient(135deg, ${TEAL}, #2a7262)` },
+          ].map((s, i) => (
+            <Pop key={s.title} delay={i * 0.12}>
+              <div style={{ background: s.bg, borderRadius: 24, padding: "36px 24px", textAlign: "left", color: "#fff" }}>
+                <span style={{ fontSize: 32, display: "block", marginBottom: 12 }}>{s.n}</span>
+                <h4 style={{ fontSize: 16, fontWeight: 800, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 1 }}>{s.title}</h4>
+                <p style={{ fontSize: 14, lineHeight: 1.65, opacity: 0.8, margin: 0 }}>{s.desc}</p>
+              </div>
+            </Pop>
+          ))}
         </div>
       </section>
 
       {/* ─── CTA ─── */}
-      <section style={{ borderTop: `1px solid ${BORDER}`, padding: "80px 48px", textAlign: "center" }}>
-        <Reveal>
-          <h2 style={{ fontFamily: "Georgia, serif", fontSize: 36, color: TEXT, margin: "0 0 16px" }}>Ready to elevate your teaching?</h2>
-          <p style={{ fontSize: 15, color: MUTED, marginBottom: 32 }}>Join educators using AI-powered analytics.</p>
-          <a href="/api/auth/login" style={{ textDecoration: "none", background: `linear-gradient(135deg, ${GOLD}, ${AMBER})`, color: BG, padding: "16px 40px", borderRadius: 8, fontSize: 16, fontWeight: 700, display: "inline-block" }}>
+      <section style={{ background: `linear-gradient(135deg, ${CORAL}, ${TEAL})`, borderRadius: "40px 40px 0 0", padding: "80px 48px", textAlign: "center" }}>
+        <Pop>
+          <h2 style={{ fontSize: 40, fontWeight: 900, color: "#fff", margin: "0 0 16px" }}>Ready to level up your teaching? 🚀</h2>
+          <p style={{ fontSize: 16, color: "rgba(255,255,255,0.75)", marginBottom: 32 }}>Join teachers using AI to understand every student.</p>
+          <a href="/api/auth/login" style={{ textDecoration: "none", background: "#fff", color: CORAL, padding: "18px 40px", borderRadius: 18, fontSize: 17, fontWeight: 800, display: "inline-block", boxShadow: "0 8px 24px rgba(0,0,0,0.15)" }}>
             Get Started with Google
           </a>
-          <p style={{ fontSize: 10, color: "rgba(232,224,212,0.15)", marginTop: 24, letterSpacing: 2 }}>SDG 4 · QUALITY EDUCATION · KITAHACK 2026 · GEMINI AI</p>
-        </Reveal>
+          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 24 }}>SDG 4 · Quality Education · KitaHack 2026 · Gemini AI</p>
+        </Pop>
       </section>
     </div>
   );
