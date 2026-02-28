@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   try {
-    const session = await requireSession();
+    await requireSession();
     const url = new URL(req.url);
     const courseId = url.searchParams.get("courseId");
     const quizId = url.searchParams.get("quizId");
@@ -23,9 +23,6 @@ export async function GET(req: Request) {
     }
 
     const data = snap.data()!;
-    if (data.ownerId !== session.sub) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
 
     return NextResponse.json({
       found: true,

@@ -82,6 +82,20 @@ interface AnalysisData {
   };
 }
 
+interface AnalysisApiPayload {
+  found?: boolean;
+  derivedAnalysis?: {
+    riskDistribution?: RiskEntry[];
+    scoreMetrics?: ScoreMetrics;
+    conceptHeatmap?: ConceptEntry[];
+    errorTypeBreakdown?: ErrorBreakdown[];
+  };
+  modelOutput?: {
+    students?: StudentAnalysis[];
+  };
+  emailMapping?: Record<string, string>;
+}
+
 type StudentRiskLevel = "low" | "medium" | "high" | "critical";
 
 interface Misconception {
@@ -232,6 +246,38 @@ function toReadableGenerationError(rawError: string | undefined, fallback: strin
   }
 
   return normalized.length > 220 ? `${normalized.slice(0, 217)}...` : normalized;
+}
+
+function buildSummaryFromAnalysis(payload: AnalysisApiPayload): AnalysisSummary | null {
+  if (!payload.found) return null;
+  return {
+    studentsAnalyzed: payload.modelOutput?.students?.length ?? 0,
+    riskDistribution: payload.derivedAnalysis?.riskDistribution ?? [],
+    scoreMetrics: payload.derivedAnalysis?.scoreMetrics ?? {
+      averageScore: 0,
+      medianScore: 0,
+      averageCompletionRate: 0,
+    },
+  };
+}
+
+function buildAnalysisData(payload: AnalysisApiPayload): AnalysisData | null {
+  if (!payload.found) return null;
+  return {
+    derivedAnalysis: {
+      riskDistribution: payload.derivedAnalysis?.riskDistribution ?? [],
+      scoreMetrics: payload.derivedAnalysis?.scoreMetrics ?? {
+        averageScore: 0,
+        medianScore: 0,
+        averageCompletionRate: 0,
+      },
+      conceptHeatmap: payload.derivedAnalysis?.conceptHeatmap ?? [],
+      errorTypeBreakdown: payload.derivedAnalysis?.errorTypeBreakdown ?? [],
+    },
+    modelOutput: {
+      students: payload.modelOutput?.students ?? [],
+    },
+  };
 }
 
 export function QuizSyncPanel({ courseId, quizId }: { courseId: string; quizId: string }) {
@@ -479,26 +525,39 @@ export function QuizAnalysisPanel({ courseId, quizId }: { courseId: string; quiz
   const [summary, setSummary] = useState<AnalysisSummary | null>(null);
   const [statusText, setStatusText] = useState("Ready to sync class data and run analysis");
 
+  const loadPersistedSummary = useCallback(async (): Promise<AnalysisSummary | null> => {
+    const response = await fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quizId}`, {
+      cache: "no-store",
+    });
+    if (response.status === 404) {
+      return null;
+    }
+    const payload = (await response.json().catch(() => ({}))) as AnalysisApiPayload;
+    if (!response.ok) {
+      throw new Error(toApiErrorMessage(payload, "Failed to load saved analysis."));
+    }
+    return buildSummaryFromAnalysis(payload);
+  }, [courseId, quizId]);
+
   useEffect(() => {
-    fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quizId}`)
-      .then((response) => response.json())
-      .then((data) => {
-        if (data.found) {
+    let cancelled = false;
+    async function loadExistingSummary() {
+      try {
+        const existingSummary = await loadPersistedSummary();
+        if (!cancelled && existingSummary) {
+          setSummary(existingSummary);
           setComplete(true);
           setShowingPreviousResult(false);
-          setSummary({
-            studentsAnalyzed: data.modelOutput?.students?.length ?? 0,
-            riskDistribution: data.derivedAnalysis?.riskDistribution ?? [],
-            scoreMetrics: data.derivedAnalysis?.scoreMetrics ?? {
-              averageScore: 0,
-              medianScore: 0,
-              averageCompletionRate: 0,
-            },
-          });
         }
-      })
-      .catch(() => {});
-  }, [courseId, quizId]);
+      } catch {
+        // silent; user can run analysis manually
+      }
+    }
+    void loadExistingSummary();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadPersistedSummary]);
 
   useEffect(() => {
     if (!running) return;
@@ -551,8 +610,15 @@ export function QuizAnalysisPanel({ courseId, quizId }: { courseId: string; quiz
         throw new Error(toAnalysisErrorMessage(data));
       }
 
-      const payload = data as { summary?: AnalysisSummary };
-      setSummary(payload.summary ?? null);
+      setStatusText("Loading saved analysis...");
+      const persistedSummary = await loadPersistedSummary();
+      if (!persistedSummary) {
+        throw new Error(
+          "Analysis completed, but saved insights are not available yet. Please try Run Again.",
+        );
+      }
+
+      setSummary(persistedSummary);
       setComplete(true);
       setShowingPreviousResult(false);
       setStatusText("Sync and analysis complete");
@@ -811,15 +877,15 @@ export function QuizInsightsPanel({ courseId, quizId }: { courseId: string; quiz
       const response = await fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quizId}`, {
         cache: "no-store",
       });
-      if (!response.ok) {
-        throw new Error("Failed to load insights.");
-      }
-      const payload = (await response.json()) as AnalysisData & { found?: boolean };
-      if (payload.found) {
-        setData(payload);
-      } else {
+      if (response.status === 404) {
         setData(null);
+        return;
       }
+      const payload = (await response.json().catch(() => ({}))) as AnalysisApiPayload;
+      if (!response.ok) {
+        throw new Error(toApiErrorMessage(payload, "Failed to load insights."));
+      }
+      setData(buildAnalysisData(payload));
     } catch {
       setLoadError("Could not load insights right now.");
     } finally {
@@ -871,11 +937,26 @@ export function QuizInsightsPanel({ courseId, quizId }: { courseId: string; quiz
               : "Run Sync & Analyze first, then return here for class-level trends."
           }
           tone={loadError ? "error" : "empty"}
-          action={(
-            <Link href={routes.quizWorkspace(courseId, quizId, { view: "analysis" })}>
-              <button className="edu-btn">Open Sync & Analyze</button>
-            </Link>
-          )}
+          action={
+            loadError ? (
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button
+                  className="edu-btn-outline"
+                  onClick={() => void loadAnalysis("refresh")}
+                  disabled={refreshing}
+                >
+                  {refreshing ? "Retrying..." : "Retry"}
+                </button>
+                <Link href={routes.quizWorkspace(courseId, quizId, { view: "analysis" })}>
+                  <button className="edu-btn">Open Sync & Analyze</button>
+                </Link>
+              </div>
+            ) : (
+              <Link href={routes.quizWorkspace(courseId, quizId, { view: "analysis" })}>
+                <button className="edu-btn">Open Sync & Analyze</button>
+              </Link>
+            )
+          }
         />
       </div>
     );
@@ -1145,14 +1226,15 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
       const response = await fetch(`/api/dashboard/analysis?courseId=${courseId}&quizId=${quizId}`, {
         cache: "no-store",
       });
-      if (!response.ok) {
-        throw new Error("Failed to load students.");
+      if (response.status === 404) {
+        setStudents([]);
+        setEmailMap({});
+        return;
       }
-      const data = (await response.json()) as {
-        found?: boolean;
-        modelOutput?: { students?: StudentAnalysis[] };
-        emailMapping?: Record<string, string>;
-      };
+      const data = (await response.json().catch(() => ({}))) as AnalysisApiPayload;
+      if (!response.ok) {
+        throw new Error(toApiErrorMessage(data, "Failed to load students."));
+      }
       if (data.found) {
         setStudents(data.modelOutput?.students ?? []);
         setEmailMap(data.emailMapping ?? {});
@@ -1183,12 +1265,25 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
     };
   }, [loadStudents]);
 
+  const openBatchModal = useCallback(() => {
+    setBatchPhase("select");
+    setBatchResult(null);
+    setBatchError(null);
+    setShowBatchModal(true);
+  }, []);
+
+  const closeBatchModal = useCallback(() => {
+    if (batchGenerating) return;
+    setShowBatchModal(false);
+    setBatchPhase("select");
+  }, [batchGenerating]);
+
   useEffect(() => {
     if (!showBatchModal) return;
 
     const previousOverflow = document.body.style.overflow;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !batchGenerating) {
+      if (event.key === "Escape") {
         closeBatchModal();
       }
     };
@@ -1199,7 +1294,7 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [showBatchModal, batchGenerating]);
+  }, [showBatchModal, closeBatchModal]);
 
   const filtered = students
     .filter((student) => riskFilter === "all" || student.riskLevel === riskFilter);
@@ -1219,19 +1314,6 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
     const email = emailMap[id] ?? id;
     return email.split("@")[0].replace(/[._]/g, " ");
   }, [emailMap]);
-
-  function openBatchModal() {
-    setBatchPhase("select");
-    setBatchResult(null);
-    setBatchError(null);
-    setShowBatchModal(true);
-  }
-
-  function closeBatchModal() {
-    if (batchGenerating) return;
-    setShowBatchModal(false);
-    setBatchPhase("select");
-  }
 
   async function runBatchGenerate() {
     setBatchGenerating(true);
@@ -1302,9 +1384,18 @@ export function QuizStudentsPanel({ courseId, quizId }: { courseId: string; quiz
           description="Please try again soon, or open Sync & Analyze to run a new analysis."
           tone="error"
           action={(
-            <Link href={routes.quizWorkspace(courseId, quizId, { view: "analysis" })}>
-              <button className="edu-btn">Open Sync & Analyze</button>
-            </Link>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                className="edu-btn-outline"
+                onClick={() => void loadStudents("refresh")}
+                disabled={refreshing}
+              >
+                {refreshing ? "Retrying..." : "Retry"}
+              </button>
+              <Link href={routes.quizWorkspace(courseId, quizId, { view: "analysis" })}>
+                <button className="edu-btn">Open Sync & Analyze</button>
+              </Link>
+            </div>
           )}
         />
       </div>

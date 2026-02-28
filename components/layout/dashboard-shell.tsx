@@ -29,6 +29,7 @@ interface AuthStatusResponse {
 }
 
 const AUTO_REFRESH_STALE_MS = 10 * 60 * 1000;
+const AUTO_REFRESH_COOLDOWN_MS = 2 * 60 * 1000;
 
 const navItems = [
   { href: routes.dashboard(), label: "Overview" },
@@ -158,7 +159,7 @@ export default function DashboardShell({
   const [runningBootstrap, setRunningBootstrap] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
-  const autoTriggeredRefresh = useRef(false);
+  const lastAutoBootstrapRunAtRef = useRef(0);
 
   const integrationsConnected = useMemo(() => {
     if (!authStatus) return false;
@@ -240,8 +241,9 @@ export default function DashboardShell({
   }, [bootstrap, loadBootstrapStatus]);
 
   useEffect(() => {
-    if (!authStatus?.authenticated || !bootstrap || !integrationsConnected) return;
-    if (autoTriggeredRefresh.current) return;
+    if (!authStatus?.authenticated || !bootstrap || !integrationsConnected || runningBootstrap) {
+      return;
+    }
 
     const isStale =
       !bootstrap.lastAutoSyncAt ||
@@ -253,15 +255,20 @@ export default function DashboardShell({
     const shouldRunRefresh =
       bootstrap.hasInitialSync &&
       bootstrap.bootstrapStatus !== "syncing" &&
-      (isStale || hasEmptyCachedStats);
+      (isStale || (!bootstrap.lastAutoSyncAt && hasEmptyCachedStats));
 
     if (!shouldRunInitial && !shouldRunRefresh) {
       return;
     }
 
-    autoTriggeredRefresh.current = true;
+    const now = Date.now();
+    if (now - lastAutoBootstrapRunAtRef.current < AUTO_REFRESH_COOLDOWN_MS) {
+      return;
+    }
+
+    lastAutoBootstrapRunAtRef.current = now;
     void runBootstrap(shouldRunInitial ? "initial" : "refresh");
-  }, [authStatus, bootstrap, integrationsConnected, runBootstrap]);
+  }, [authStatus, bootstrap, integrationsConnected, runBootstrap, runningBootstrap]);
 
   useEffect(() => {
     setIsUserMenuOpen(false);
@@ -524,9 +531,11 @@ export default function DashboardShell({
                   className="edu-btn-outline"
                   style={{ fontSize: 12, padding: "4px 10px" }}
                   onClick={() => void runBootstrap("refresh")}
-                  disabled
+                  disabled={runningBootstrap || bootstrap.bootstrapStatus === "syncing"}
                 >
-                  Refresh
+                  {runningBootstrap || bootstrap.bootstrapStatus === "syncing"
+                    ? "Refreshing..."
+                    : "Refresh"}
                 </button>
               </div>
             )}

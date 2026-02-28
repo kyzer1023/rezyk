@@ -38,6 +38,23 @@ interface QuizAnalysisSnapshot {
   topWeakConcepts: string[];
 }
 
+interface CourseListResponse {
+  courses?: Course[];
+  error?: string;
+}
+
+interface CourseQuizListResponse {
+  quizzes?: Quiz[];
+  error?: string;
+}
+
+interface CourseDetailSnapshot {
+  course: Course | null;
+  quizzes: Quiz[];
+}
+
+const courseDetailCache = new Map<string, CourseDetailSnapshot>();
+
 const COURSE_VIEW_TABS: Array<{ id: CourseDetailView; label: string }> = [
   { id: "quizzes", label: "List of Quizzes" },
   { id: "course-analysis", label: "Course Analyze" },
@@ -56,15 +73,27 @@ function getScoreColor(score: number): string {
   return "#A63D2E";
 }
 
+function toCourseDetailErrorMessage(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== "object") {
+    return fallback;
+  }
+  const data = payload as { error?: unknown };
+  return typeof data.error === "string" && data.error.trim().length > 0
+    ? data.error
+    : fallback;
+}
+
 export default function CourseDetailPage({ params }: { params: Promise<{ courseId: string }> }) {
   const { courseId } = use(params);
   const searchParams = useSearchParams();
   const view = getCourseViewFromQuery(searchParams.get("view"));
   const { bootstrap } = useDashboardBootstrapContext();
-  const [course, setCourse] = useState<Course | null>(null);
-  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const cachedSnapshot = courseDetailCache.get(courseId);
+  const [course, setCourse] = useState<Course | null>(() => cachedSnapshot?.course ?? null);
+  const [quizzes, setQuizzes] = useState<Quiz[]>(() => cachedSnapshot?.quizzes ?? []);
+  const [initialLoading, setInitialLoading] = useState(cachedSnapshot === undefined);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [historySnapshots, setHistorySnapshots] = useState<QuizAnalysisSnapshot[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const lastAppliedSyncAtRef = useRef(0);
@@ -78,11 +107,31 @@ export default function CourseDetailPage({ params }: { params: Promise<{ courseI
         fetch("/api/dashboard/courses", { cache: "no-store" }),
         fetch(`/api/dashboard/quizzes?courseId=${courseId}`, { cache: "no-store" }),
       ]);
-      const cData = (await cRes.json()) as { courses?: Course[] };
-      const qData = (await qRes.json()) as { quizzes?: Quiz[] };
-      const found = (cData.courses ?? []).find((item) => item.id === courseId);
-      setCourse(found ?? null);
-      setQuizzes(qData.quizzes ?? []);
+      const cData = (await cRes.json().catch(() => ({}))) as CourseListResponse;
+      const qData = (await qRes.json().catch(() => ({}))) as CourseQuizListResponse;
+      if (!cRes.ok || !qRes.ok) {
+        const message = !cRes.ok
+          ? toCourseDetailErrorMessage(cData, "Failed to load course.")
+          : toCourseDetailErrorMessage(qData, "Failed to load quizzes.");
+        throw new Error(message);
+      }
+      const found = (cData.courses ?? []).find((item) => item.id === courseId) ?? null;
+      const nextQuizzes = qData.quizzes ?? [];
+      setCourse(found);
+      setQuizzes(nextQuizzes);
+      courseDetailCache.set(courseId, {
+        course: found,
+        quizzes: nextQuizzes,
+      });
+      setLoadError(null);
+    } catch (error) {
+      const fallback = mode === "refresh"
+        ? "Could not refresh course data. Showing latest saved values."
+        : "Could not load course data right now.";
+      const message = error instanceof Error && error.message.trim().length > 0
+        ? error.message
+        : fallback;
+      setLoadError(message);
     } finally {
       if (mode === "refresh") {
         setRefreshing(false);
@@ -105,14 +154,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ courseI
 
   useEffect(() => {
     if (!bootstrap?.lastAutoSyncAt || initialLoading) return;
-    if (lastAppliedSyncAtRef.current === 0) {
-      lastAppliedSyncAtRef.current = bootstrap.lastAutoSyncAt;
-      return;
-    }
-    if (bootstrap.lastAutoSyncAt <= lastAppliedSyncAtRef.current) {
-      return;
-    }
-    lastAppliedSyncAtRef.current = bootstrap.lastAutoSyncAt;
+    const hasNoCourseData = !course && quizzes.length === 0;
     async function refreshFromBootstrap() {
       try {
         await loadCourseData("refresh");
@@ -120,8 +162,19 @@ export default function CourseDetailPage({ params }: { params: Promise<{ courseI
         // silent
       }
     }
+    if (lastAppliedSyncAtRef.current === 0) {
+      lastAppliedSyncAtRef.current = bootstrap.lastAutoSyncAt;
+      if (hasNoCourseData) {
+        void refreshFromBootstrap();
+      }
+      return;
+    }
+    if (bootstrap.lastAutoSyncAt <= lastAppliedSyncAtRef.current) {
+      return;
+    }
+    lastAppliedSyncAtRef.current = bootstrap.lastAutoSyncAt;
     void refreshFromBootstrap();
-  }, [bootstrap?.lastAutoSyncAt, initialLoading, loadCourseData]);
+  }, [bootstrap?.lastAutoSyncAt, course, initialLoading, loadCourseData, quizzes.length]);
 
   const loadHistorySnapshots = useCallback(async () => {
     setHistoryLoading(true);
@@ -208,6 +261,12 @@ export default function CourseDetailPage({ params }: { params: Promise<{ courseI
             : `${course?.section ? `${course.section} · ` : ""}${course?.studentCount ?? 0} students`}
         </p>
       </div>
+
+      {loadError && (
+        <p className="edu-fade-in edu-fd1" style={{ fontSize: 12, color: "#A25E1A", marginBottom: 12 }}>
+          {loadError}
+        </p>
+      )}
 
       <div className="edu-fade-in" style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
         {COURSE_VIEW_TABS.map((tab) => (

@@ -27,33 +27,87 @@ interface Quiz {
   totalStudents: number;
 }
 
+interface CoursesResponse {
+  courses?: Course[];
+  error?: string;
+}
+
+interface QuizzesResponse {
+  quizzes?: Quiz[];
+  error?: string;
+}
+
+interface DashboardSnapshot {
+  courses: Course[];
+  quizzes: Quiz[];
+}
+
+let dashboardSnapshotCache: DashboardSnapshot | null = null;
+
 function getPerformanceColor(value: number): string {
   if (value >= 75) return "#2E7D4B";
   if (value >= 55) return "#A25E1A";
   return "#A63D2E";
 }
 
+function toDashboardErrorMessage(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== "object") {
+    return fallback;
+  }
+  const data = payload as { error?: unknown };
+  return typeof data.error === "string" && data.error.trim().length > 0
+    ? data.error
+    : fallback;
+}
+
 export default function DashboardPage() {
   const { bootstrap, runningBootstrap } = useDashboardBootstrapContext();
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const [courses, setCourses] = useState<Course[]>(() => dashboardSnapshotCache?.courses ?? []);
+  const [quizzes, setQuizzes] = useState<Quiz[]>(() => dashboardSnapshotCache?.quizzes ?? []);
+  const [initialLoading, setInitialLoading] = useState(dashboardSnapshotCache === null);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const lastAppliedSyncAtRef = useRef(0);
 
   const loadDashboardData = useCallback(async (mode: "initial" | "refresh") => {
     if (mode === "refresh") {
       setRefreshing(true);
     }
+    if (mode === "initial") {
+      setLoadError(null);
+    }
     try {
       const [cRes, qRes] = await Promise.all([
         fetch("/api/dashboard/courses", { cache: "no-store" }),
         fetch("/api/dashboard/quizzes", { cache: "no-store" }),
       ]);
-      const cData = (await cRes.json()) as { courses?: Course[] };
-      const qData = (await qRes.json()) as { quizzes?: Quiz[] };
-      setCourses(cData.courses ?? []);
-      setQuizzes(qData.quizzes ?? []);
+      const cData = (await cRes.json().catch(() => ({}))) as CoursesResponse;
+      const qData = (await qRes.json().catch(() => ({}))) as QuizzesResponse;
+
+      if (!cRes.ok || !qRes.ok) {
+        const message = !cRes.ok
+          ? toDashboardErrorMessage(cData, "Failed to load courses.")
+          : toDashboardErrorMessage(qData, "Failed to load quizzes.");
+        throw new Error(message);
+      }
+
+      const nextCourses = cData.courses ?? [];
+      const nextQuizzes = qData.quizzes ?? [];
+      setCourses(nextCourses);
+      setQuizzes(nextQuizzes);
+      dashboardSnapshotCache = {
+        courses: nextCourses,
+        quizzes: nextQuizzes,
+      };
+      setLoadError(null);
+    } catch (error) {
+      const fallback = mode === "refresh"
+        ? "Could not refresh dashboard data. Showing latest saved values."
+        : "Could not load dashboard data right now.";
+      const message = error instanceof Error && error.message.trim().length > 0
+        ? error.message
+        : fallback;
+      setLoadError(message);
     } finally {
       if (mode === "refresh") {
         setRefreshing(false);
@@ -81,14 +135,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!bootstrap?.lastAutoSyncAt || initialLoading) return;
-    if (lastAppliedSyncAtRef.current === 0) {
-      lastAppliedSyncAtRef.current = bootstrap.lastAutoSyncAt;
-      return;
-    }
-    if (bootstrap.lastAutoSyncAt <= lastAppliedSyncAtRef.current) {
-      return;
-    }
-    lastAppliedSyncAtRef.current = bootstrap.lastAutoSyncAt;
+    const hasNoDashboardData = courses.length === 0 && quizzes.length === 0;
     async function refreshFromBootstrap() {
       try {
         await loadDashboardData("refresh");
@@ -96,8 +143,19 @@ export default function DashboardPage() {
         // silent
       }
     }
+    if (lastAppliedSyncAtRef.current === 0) {
+      lastAppliedSyncAtRef.current = bootstrap.lastAutoSyncAt;
+      if (hasNoDashboardData) {
+        void refreshFromBootstrap();
+      }
+      return;
+    }
+    if (bootstrap.lastAutoSyncAt <= lastAppliedSyncAtRef.current) {
+      return;
+    }
+    lastAppliedSyncAtRef.current = bootstrap.lastAutoSyncAt;
     void refreshFromBootstrap();
-  }, [bootstrap?.lastAutoSyncAt, initialLoading, loadDashboardData]);
+  }, [bootstrap?.lastAutoSyncAt, courses.length, initialLoading, loadDashboardData, quizzes.length]);
 
   const analyzedCount = quizzes.filter((q) => q.analysisStatus === "completed").length;
   const totalStudents = courses.reduce((sum, c) => sum + c.studentCount, 0);
@@ -110,7 +168,7 @@ export default function DashboardPage() {
   const bootstrapSyncing = bootstrap?.bootstrapStatus === "syncing" || runningBootstrap;
   const showMetricSkeleton =
     initialLoading ||
-    (hasNoDashboardData && (bootstrapPending || bootstrapSyncing || refreshing));
+    (hasNoDashboardData && (bootstrapPending || bootstrapSyncing || refreshing || Boolean(loadError)));
 
   return (
     <div>
@@ -122,6 +180,8 @@ export default function DashboardPage() {
       <p className="edu-fade-in edu-fd1 edu-muted" style={{ fontSize: 14, marginBottom: 28 }}>
         {initialLoading
           ? "Getting your class overview ready..."
+          : loadError && hasNoDashboardData
+            ? "Could not load dashboard data. Try Refresh to sync again."
           : courses.length > 0
             ? "Your classroom overview at a glance."
             : bootstrapSyncing
@@ -130,6 +190,12 @@ export default function DashboardPage() {
                 ? "Data sync needs attention. Retry refresh to continue."
                 : "Setting up your classroom data..."}
       </p>
+
+      {loadError && !initialLoading && (
+        <p className="edu-fade-in edu-fd1" style={{ fontSize: 12, marginBottom: 14, color: "#A25E1A" }}>
+          {loadError}
+        </p>
+      )}
 
       {showMetricSkeleton ? (
         <div className="edu-fade-in edu-fd1" style={{ marginBottom: 28 }}>

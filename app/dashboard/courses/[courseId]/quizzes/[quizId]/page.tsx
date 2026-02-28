@@ -91,18 +91,19 @@ export default function QuizWorkspacePage({
         )}
       </div>
 
-      <div style={{ display: view === "analysis" ? "block" : "none" }}>
+      {view === "analysis" && (
         <QuizAnalysisPanel courseId={courseId} quizId={quizId} />
-      </div>
-      <div style={{ display: view === "insights" ? "block" : "none" }}>
+      )}
+      {view === "insights" && (
         <QuizInsightsPanel courseId={courseId} quizId={quizId} />
-      </div>
-      <div style={{ display: view === "students" ? "block" : "none" }}>
-        {!studentId && <QuizStudentsPanel courseId={courseId} quizId={quizId} />}
-        {studentId && (
+      )}
+      {view === "students" && (
+        !studentId ? (
+          <QuizStudentsPanel courseId={courseId} quizId={quizId} />
+        ) : (
           <QuizStudentDetailPanel courseId={courseId} quizId={quizId} studentId={studentId} />
-        )}
-      </div>
+        )
+      )}
     </div>
   );
 }
