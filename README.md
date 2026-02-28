@@ -187,18 +187,21 @@ bun run analysis:structured-smoke
 
 ## Future roadmap
 
-1. Complete preliminary-round evidence pack:
-   - record at least 3 real teacher feedback insights
-   - implement and document at least 3 feedback-driven improvements
-2. Deepen pedagogical analytics:
-   - strengthen trend analysis across quiz cycles
-   - improve intervention recommendation precision and explainability
-3. Expand teacher outputs:
-   - generate richer per-student notes and follow-up material recommendations
-   - add export-ready summaries for lesson planning/reporting
-4. Improve engineering reliability:
-   - add automated tests for core API routes and analysis validators
-   - add structured observability for sync and analysis failures
-5. Harden production readiness:
-   - finalize OAuth consent publishing and deployment profile
-   - enforce stricter operational guardrails for quotas, retries, and error recovery
+1. Complete Google Classroom depth first:
+   - fully support Classroom workflows beyond baseline quiz sync (assignment lifecycle coverage, richer roster and submission states, grading context continuity)
+   - improve Classroom-native UX so teachers can operate end-to-end without manual data workarounds
+2. Expand within the Google ecosystem:
+   - deepen Google Forms ingestion fidelity (question types, grading modes, edge-case response mapping)
+   - integrate additional Google Workspace surfaces where useful (for example Drive/Docs-backed intervention artifacts and reporting exports)
+3. Become LMS-agnostic over time:
+   - introduce a connector architecture so analysis is not tied only to Google Classroom
+   - add adapters for other ecosystems (for example Moodle, Canvas, Microsoft Teams for Education) while preserving one shared analysis contract
+4. Evolve into a broader instructional intelligence layer:
+   - track longitudinal learning signals across classes, terms, and assessment formats
+   - shift from reactive reporting to proactive early-warning and intervention planning
+5. Expand stakeholder value:
+   - provide role-based views for department heads and school leadership while keeping teacher workflows simple
+   - generate clearer communication artifacts for parent/student follow-up when needed
+6. Strengthen reliability and production readiness:
+   - add automated tests for sync, analysis validation, and route-level regression coverage
+   - harden quota controls, observability, and deployment guardrails for sustained real-world usage
