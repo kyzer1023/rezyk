@@ -376,17 +376,189 @@ function repairEmptyAffectedQuestions(
   };
 }
 
+interface StudentArrayMappingRepairResult {
+  repairedRawText: string;
+  insertedMissingStudentCount: number;
+  removedDuplicateStudentCount: number;
+  insertedMisconceptionArrayCount: number;
+  insertedInterventionArrayCount: number;
+  repairedMisconceptionCount: number;
+}
+
+function deriveFallbackRiskLevel(student: QuizStudentInput): "low" | "medium" | "high" | "critical" {
+  const percent = student.maxScore > 0 ? (student.score / student.maxScore) * 100 : 0;
+  if (percent < 35) return "critical";
+  if (percent < 55) return "high";
+  if (percent < 75) return "medium";
+  return "low";
+}
+
+function repairStudentArrayMappingIssues(
+  rawText: string,
+  fixture: QuizAnalysisInput,
+): StudentArrayMappingRepairResult | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    return null;
+  }
+
+  const root = toRecord(parsed);
+  if (!root || !Array.isArray(root.students)) {
+    return null;
+  }
+
+  const fixtureStudentsById = new Map(
+    fixture.students.map((student) => [student.studentId, student]),
+  );
+  const questionConceptById = new Map(
+    fixture.questions.map((question) => [question.questionId, question.concept]),
+  );
+  const firstQuestionId = fixture.questions[0]?.questionId ?? "Q1";
+
+  let insertedMissingStudentCount = 0;
+  let removedDuplicateStudentCount = 0;
+  let insertedMisconceptionArrayCount = 0;
+  let insertedInterventionArrayCount = 0;
+  let repairedMisconceptionCount = 0;
+
+  const seenStudentIds = new Set<string>();
+  const normalizedStudents: Record<string, unknown>[] = [];
+
+  for (const studentEntry of root.students) {
+    const studentRecord = toRecord(studentEntry);
+    if (!studentRecord) {
+      continue;
+    }
+
+    const studentId = toStringValue(studentRecord.studentId);
+    if (!studentId) {
+      normalizedStudents.push(studentRecord);
+      continue;
+    }
+
+    if (seenStudentIds.has(studentId)) {
+      removedDuplicateStudentCount += 1;
+      continue;
+    }
+    seenStudentIds.add(studentId);
+
+    const fixtureStudent = fixtureStudentsById.get(studentId);
+    const fallbackQuestion =
+      fixtureStudent?.incorrectQuestionIds[0] ??
+      fixtureStudent?.attemptedQuestionIds[0] ??
+      firstQuestionId;
+    const fallbackConcept =
+      questionConceptById.get(fallbackQuestion) ?? "General concept review";
+
+    const misconceptionsRaw = studentRecord.misconceptions;
+    if (!Array.isArray(misconceptionsRaw) || misconceptionsRaw.length === 0) {
+      studentRecord.misconceptions = [
+        {
+          concept: fallbackConcept,
+          errorType: "careless",
+          affectedQuestions: [fallbackQuestion],
+          evidence:
+            "Model response omitted misconception details. Added fallback based on available student attempts.",
+        },
+      ];
+      insertedMisconceptionArrayCount += 1;
+    } else {
+      for (const misconceptionEntry of misconceptionsRaw) {
+        const misconceptionRecord = toRecord(misconceptionEntry);
+        if (!misconceptionRecord) {
+          continue;
+        }
+        const affectedQuestions = misconceptionRecord.affectedQuestions;
+        if (!Array.isArray(affectedQuestions) || affectedQuestions.length === 0) {
+          misconceptionRecord.affectedQuestions = [fallbackQuestion];
+          repairedMisconceptionCount += 1;
+        }
+      }
+    }
+
+    const interventionsRaw = studentRecord.interventions;
+    if (!Array.isArray(interventionsRaw) || interventionsRaw.length === 0) {
+      studentRecord.interventions = [
+        {
+          type: "worksheet",
+          focusArea: fallbackConcept,
+          action:
+            "Assign one short corrective worksheet focused on the referenced concept, then review answers together.",
+        },
+      ];
+      insertedInterventionArrayCount += 1;
+    }
+
+    normalizedStudents.push(studentRecord);
+  }
+
+  for (const fixtureStudent of fixture.students) {
+    if (seenStudentIds.has(fixtureStudent.studentId)) {
+      continue;
+    }
+    const fallbackQuestion =
+      fixtureStudent.incorrectQuestionIds[0] ??
+      fixtureStudent.attemptedQuestionIds[0] ??
+      firstQuestionId;
+    const fallbackConcept =
+      questionConceptById.get(fallbackQuestion) ?? "General concept review";
+
+    normalizedStudents.push({
+      studentId: fixtureStudent.studentId,
+      riskLevel: deriveFallbackRiskLevel(fixtureStudent),
+      misconceptions: [
+        {
+          concept: fallbackConcept,
+          errorType: "careless",
+          affectedQuestions: [fallbackQuestion],
+          evidence:
+            "Model response omitted this student. Added fallback entry using quiz attempt data.",
+        },
+      ],
+      interventions: [
+        {
+          type: "worksheet",
+          focusArea: fallbackConcept,
+          action:
+            "Run a targeted worksheet and short reteach on the referenced concept before the next assessment.",
+        },
+      ],
+      rationale:
+        "Fallback student analysis entry generated because the model output omitted this student from the array.",
+    });
+    insertedMissingStudentCount += 1;
+  }
+
+  const changed =
+    insertedMissingStudentCount > 0 ||
+    removedDuplicateStudentCount > 0 ||
+    insertedMisconceptionArrayCount > 0 ||
+    insertedInterventionArrayCount > 0 ||
+    repairedMisconceptionCount > 0;
+
+  if (!changed) {
+    return null;
+  }
+
+  root.students = normalizedStudents;
+
+  return {
+    repairedRawText: JSON.stringify(root),
+    insertedMissingStudentCount,
+    removedDuplicateStudentCount,
+    insertedMisconceptionArrayCount,
+    insertedInterventionArrayCount,
+    repairedMisconceptionCount,
+  };
+}
+
 export async function POST(req: Request) {
-  const requestStartedAt = Date.now();
-  const debugRunId = `analyze-${requestStartedAt}-${Math.random().toString(36).slice(2, 8)}`;
   try {
     const { session } = await requireAuth();
     const body = await req.json();
     const { courseId, quizId } = body;
-
-    // #region agent log
-    fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H4',location:'app/api/analyze/run/route.ts:entry',message:'Analyze route request received',data:{hasCourseId:Boolean(courseId),hasQuizId:Boolean(quizId),elapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
 
     if (!courseId || !quizId) {
       return NextResponse.json({ error: "courseId and quizId are required" }, { status: 400 });
@@ -426,10 +598,6 @@ export async function POST(req: Request) {
     const analysisInput = buildAnalysisInput(docId, quizTitle, storedQuestions, responses);
     const prompt = buildQuizAnalysisPrompt(analysisInput);
 
-    // #region agent log
-    fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H2',location:'app/api/analyze/run/route.ts:input-ready',message:'Prepared analysis input and prompt',data:{questionCount:storedQuestions.length,responseCount:responses.length,studentCount:analysisInput.students.length,promptLength:prompt.length,elapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
     const generationTargets = buildGenerationTargets(resolveApiKeys());
     let apiKeySource = "unknown";
     let modelIdUsed: string = ONLINE_MODEL_ID;
@@ -460,6 +628,10 @@ export async function POST(req: Request) {
     let validationResult: ReturnType<typeof validateQuizAnalysisResponse> | null = null;
     let attemptCount = 0;
     let repairedMisconceptionCount = 0;
+    let repairedMissingStudentCount = 0;
+    let repairedDuplicateStudentCount = 0;
+    let repairedMisconceptionArrayCount = 0;
+    let repairedInterventionArrayCount = 0;
     let generationTemperature: number = RETRY_TEMPERATURES[0];
     let maxOutputTokens: number = ONLINE_GENERATION_PROFILE.maxOutputTokens;
 
@@ -467,11 +639,6 @@ export async function POST(req: Request) {
       const temperature = RETRY_TEMPERATURES[attempt];
       generationTemperature = temperature;
       attemptCount = attempt + 1;
-      const attemptStartedAt = Date.now();
-
-      // #region agent log
-      fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H1',location:'app/api/analyze/run/route.ts:attempt-start',message:'Starting Gemini generation attempt',data:{attempt:attempt+1,temperature,maxOutputTokens,promptLength:prompt.length,elapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
 
       const generationResult = await generateWithFallbackTargets(
         generationTargets,
@@ -502,20 +669,40 @@ export async function POST(req: Request) {
 
       validationResult = validateQuizAnalysisResponse(rawText, analysisInput);
 
-      // #region agent log
-      fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H1',location:'app/api/analyze/run/route.ts:attempt-result',message:'Gemini generation attempt finished',data:{attempt:attempt+1,attemptDurationMs:Date.now()-attemptStartedAt,rawLength:rawText.length,finishReason:responseMeta.finishReason,candidateCount:responseMeta.candidateCount,candidatesTokenCount:responseMeta.candidatesTokenCount,thoughtsTokenCount:responseMeta.thoughtsTokenCount,totalTokenCount:responseMeta.totalTokenCount,validationOk:validationResult.ok,validationErrorClass:validationResult.ok?null:validationResult.errorClass,elapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-
       if (!validationResult.ok && validationResult.errorClass === "schema_fail") {
-        const repairResult = repairEmptyAffectedQuestions(rawText, analysisInput);
-        if (repairResult) {
-          const repairedValidationResult = validateQuizAnalysisResponse(repairResult.repairedRawText, analysisInput);
-          repairedMisconceptionCount += repairResult.repairedMisconceptionCount;
+        const mappingRepairResult = repairStudentArrayMappingIssues(rawText, analysisInput);
+        if (mappingRepairResult) {
+          const repairedValidationResult = validateQuizAnalysisResponse(
+            mappingRepairResult.repairedRawText,
+            analysisInput,
+          );
+          repairedMissingStudentCount += mappingRepairResult.insertedMissingStudentCount;
+          repairedDuplicateStudentCount += mappingRepairResult.removedDuplicateStudentCount;
+          repairedMisconceptionArrayCount += mappingRepairResult.insertedMisconceptionArrayCount;
+          repairedInterventionArrayCount += mappingRepairResult.insertedInterventionArrayCount;
+          repairedMisconceptionCount += mappingRepairResult.repairedMisconceptionCount;
 
           if (repairedValidationResult.ok) {
-            rawText = repairResult.repairedRawText;
+            rawText = mappingRepairResult.repairedRawText;
             outputSummary = summarizeRawOutput(rawText);
             validationResult = repairedValidationResult;
+          }
+        }
+
+        if (!validationResult.ok) {
+          const repairResult = repairEmptyAffectedQuestions(rawText, analysisInput);
+          if (repairResult) {
+            const repairedValidationResult = validateQuizAnalysisResponse(
+              repairResult.repairedRawText,
+              analysisInput,
+            );
+            repairedMisconceptionCount += repairResult.repairedMisconceptionCount;
+
+            if (repairedValidationResult.ok) {
+              rawText = repairResult.repairedRawText;
+              outputSummary = summarizeRawOutput(rawText);
+              validationResult = repairedValidationResult;
+            }
           }
         }
       }
@@ -524,10 +711,6 @@ export async function POST(req: Request) {
         ? false
         : isRetryableValidationError(validationResult.errorClass) &&
           attempt < RETRY_TEMPERATURES.length - 1;
-
-      // #region agent log
-      fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H3',location:'app/api/analyze/run/route.ts:retry-decision',message:'Evaluated retry decision after attempt',data:{attempt:attempt+1,canRetry,errorClass:validationResult.ok?null:validationResult.errorClass,finishReason:responseMeta.finishReason,maxOutputTokens,nextMaxOutputTokens:!validationResult.ok&&validationResult.errorClass==='parse_fail'&&responseMeta.finishReason==='MAX_TOKENS'?Math.max(maxOutputTokens*2,8192):maxOutputTokens,elapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
 
       if (!canRetry) {
         break;
@@ -543,10 +726,6 @@ export async function POST(req: Request) {
     }
 
     if (!validationResult.ok) {
-      // #region agent log
-      fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H3',location:'app/api/analyze/run/route.ts:validation-failure',message:'Returning validation failure response',data:{errorClass:validationResult.errorClass,attemptCount,repairedMisconceptionCount,responseLength:rawText.length,elapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-
       const diagnostics = validationResult.diagnostics.slice(0, 10).map((diagnostic) => ({
         path: diagnostic.path,
         message: diagnostic.message,
@@ -566,6 +745,10 @@ export async function POST(req: Request) {
         modelId: modelIdUsed,
         attemptCount,
         repairedMisconceptionCount,
+        repairedMissingStudentCount,
+        repairedDuplicateStudentCount,
+        repairedMisconceptionArrayCount,
+        repairedInterventionArrayCount,
         generationMeta,
         modelConfig: {
           temperature: generationTemperature,
@@ -597,6 +780,10 @@ export async function POST(req: Request) {
         modelId: modelIdUsed,
         attemptCount,
         repairedMisconceptionCount,
+        repairedMissingStudentCount,
+        repairedDuplicateStudentCount,
+        repairedMisconceptionArrayCount,
+        repairedInterventionArrayCount,
         apiKeySource,
         promptLength: prompt.length,
         responseLength: rawText.length,
@@ -615,10 +802,6 @@ export async function POST(req: Request) {
       responses.map((resp, idx) => [buildStudentId(idx), resp.respondentEmail]),
     );
 
-    // #region agent log
-    fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H5',location:'app/api/analyze/run/route.ts:write-start',message:'Starting analysis persistence writes',data:{attemptCount,studentsAnalyzed:validationResult.modelOutput.students.length,elapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
     await adminDb.collection("analyses").doc(docId).set({
       quizId: docId,
       courseId,
@@ -636,10 +819,6 @@ export async function POST(req: Request) {
       analysisStatus: "completed",
     });
 
-    // #region agent log
-    fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H5',location:'app/api/analyze/run/route.ts:success-return',message:'Returning successful analysis response',data:{attemptCount,repairedMisconceptionCount,totalElapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
     return NextResponse.json({
       success: true,
       summary: {
@@ -650,10 +829,6 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-
-    // #region agent log
-    fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H4',location:'app/api/analyze/run/route.ts:catch',message:'Analyze route threw error',data:{errorMessage:msg,totalElapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
 
     console.error("Analysis error:", msg);
     const status = msg === "MISSING_AUTH" || msg === "RECONNECT_REQUIRED" ? 401 : 500;
