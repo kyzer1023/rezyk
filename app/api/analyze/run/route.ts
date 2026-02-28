@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/requireAuth";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { GoogleGenAI } from "@google/genai";
+import type { GenerateContentResponse } from "@google/genai";
 import { buildQuizAnalysisPrompt } from "@/lib/analysis/quiz-analysis-prompt";
 import {
   ModelOutputGenerationSchema,
@@ -95,7 +96,18 @@ function buildAnalysisInput(
   return { quizId, quizTitle: quizTitle, questions, students };
 }
 
-function resolveApiKey(): { apiKey: string; source: string } {
+interface ApiKeyEntry {
+  source: string;
+  value: string;
+}
+
+interface GenerationTarget {
+  modelId: string;
+  apiKeySource: string;
+  apiKey: string;
+}
+
+function resolveApiKeys(): ApiKeyEntry[] {
   const keys = [
     { source: "GEMINI_API_KEY", value: process.env.GEMINI_API_KEY },
     { source: "GEMINI_API_KEY2", value: process.env.GEMINI_API_KEY2 },
@@ -108,8 +120,92 @@ function resolveApiKey(): { apiKey: string; source: string } {
     throw new Error("No GEMINI_API_KEY configured");
   }
 
-  const selected = keys[Math.floor(Math.random() * keys.length)];
-  return { apiKey: selected.value, source: selected.source };
+  return keys;
+}
+
+const ONLINE_MODEL_FALLBACK_CHAIN = Array.from(
+  new Set([
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    ONLINE_MODEL_ID,
+  ]),
+);
+
+function shuffleInPlace<T>(items: T[]): T[] {
+  for (let i = items.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+  return items;
+}
+
+function buildGenerationTargets(apiKeys: ApiKeyEntry[]): GenerationTarget[] {
+  const targets: GenerationTarget[] = [];
+
+  for (const modelId of ONLINE_MODEL_FALLBACK_CHAIN) {
+    const shuffledKeys = shuffleInPlace([...apiKeys]);
+    for (const keyEntry of shuffledKeys) {
+      targets.push({
+        modelId,
+        apiKeySource: keyEntry.source,
+        apiKey: keyEntry.value,
+      });
+    }
+  }
+
+  return shuffleInPlace(targets);
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  return String(error ?? "Unknown generation error");
+}
+
+function isRetryableGenerationError(error: unknown): boolean {
+  const message = toErrorMessage(error);
+  return /UNAVAILABLE|RESOURCE_EXHAUSTED|high demand|rate limit|quota|429|500|503|504|network|timed out|timeout|ECONNRESET|ETIMEDOUT/i.test(
+    message,
+  );
+}
+
+async function generateWithFallbackTargets(
+  targets: GenerationTarget[],
+  prompt: string,
+  temperature: number,
+  maxOutputTokens: number,
+): Promise<{ response: GenerateContentResponse; target: GenerationTarget }> {
+  const errors: string[] = [];
+
+  for (const target of targets) {
+    try {
+      const client = new GoogleGenAI({ apiKey: target.apiKey });
+      const response = await client.models.generateContent({
+        model: target.modelId,
+        contents: prompt,
+        config: {
+          responseMimeType: ONLINE_GENERATION_PROFILE.responseMimeType,
+          responseJsonSchema: ModelOutputGenerationSchema,
+          temperature,
+          topP: ONLINE_GENERATION_PROFILE.topP,
+          thinkingConfig: ONLINE_GENERATION_PROFILE.thinkingConfig,
+          maxOutputTokens,
+        },
+      });
+
+      return { response, target };
+    } catch (error) {
+      const message = toErrorMessage(error);
+      errors.push(`[${target.modelId} via ${target.apiKeySource}] ${message}`);
+
+      if (!isRetryableGenerationError(error)) {
+        throw new Error(errors[errors.length - 1]);
+      }
+    }
+  }
+
+  throw new Error(`All Gemini fallback targets failed: ${errors.join(" | ")}`);
 }
 
 function buildParseFailureContext(
@@ -281,10 +377,16 @@ function repairEmptyAffectedQuestions(
 }
 
 export async function POST(req: Request) {
+  const requestStartedAt = Date.now();
+  const debugRunId = `analyze-${requestStartedAt}-${Math.random().toString(36).slice(2, 8)}`;
   try {
     const { session } = await requireAuth();
     const body = await req.json();
     const { courseId, quizId } = body;
+
+    // #region agent log
+    fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H4',location:'app/api/analyze/run/route.ts:entry',message:'Analyze route request received',data:{hasCourseId:Boolean(courseId),hasQuizId:Boolean(quizId),elapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
 
     if (!courseId || !quizId) {
       return NextResponse.json({ error: "courseId and quizId are required" }, { status: 400 });
@@ -323,8 +425,14 @@ export async function POST(req: Request) {
 
     const analysisInput = buildAnalysisInput(docId, quizTitle, storedQuestions, responses);
     const prompt = buildQuizAnalysisPrompt(analysisInput);
-    const { apiKey, source: apiKeySource } = resolveApiKey();
-    const client = new GoogleGenAI({ apiKey });
+
+    // #region agent log
+    fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H2',location:'app/api/analyze/run/route.ts:input-ready',message:'Prepared analysis input and prompt',data:{questionCount:storedQuestions.length,responseCount:responses.length,studentCount:analysisInput.students.length,promptLength:prompt.length,elapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
+    const generationTargets = buildGenerationTargets(resolveApiKeys());
+    let apiKeySource = "unknown";
+    let modelIdUsed: string = ONLINE_MODEL_ID;
 
     let rawText = "";
     let responseMeta: ReturnType<typeof extractResponseMeta> = {
@@ -359,18 +467,21 @@ export async function POST(req: Request) {
       const temperature = RETRY_TEMPERATURES[attempt];
       generationTemperature = temperature;
       attemptCount = attempt + 1;
+      const attemptStartedAt = Date.now();
 
-      const geminiResponse = await client.models.generateContent({
-        model: ONLINE_MODEL_ID,
-        contents: prompt,
-        config: {
-          responseMimeType: ONLINE_GENERATION_PROFILE.responseMimeType,
-          responseJsonSchema: ModelOutputGenerationSchema,
-          temperature,
-          topP: ONLINE_GENERATION_PROFILE.topP,
-          maxOutputTokens,
-        },
-      });
+      // #region agent log
+      fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H1',location:'app/api/analyze/run/route.ts:attempt-start',message:'Starting Gemini generation attempt',data:{attempt:attempt+1,temperature,maxOutputTokens,promptLength:prompt.length,elapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+
+      const generationResult = await generateWithFallbackTargets(
+        generationTargets,
+        prompt,
+        temperature,
+        maxOutputTokens,
+      );
+      const geminiResponse = generationResult.response;
+      apiKeySource = generationResult.target.apiKeySource;
+      modelIdUsed = generationResult.target.modelId;
 
       rawText = typeof geminiResponse.text === "string" ? geminiResponse.text : String(geminiResponse.text ?? "");
       responseMeta = extractResponseMeta(geminiResponse);
@@ -391,6 +502,10 @@ export async function POST(req: Request) {
 
       validationResult = validateQuizAnalysisResponse(rawText, analysisInput);
 
+      // #region agent log
+      fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H1',location:'app/api/analyze/run/route.ts:attempt-result',message:'Gemini generation attempt finished',data:{attempt:attempt+1,attemptDurationMs:Date.now()-attemptStartedAt,rawLength:rawText.length,finishReason:responseMeta.finishReason,candidateCount:responseMeta.candidateCount,candidatesTokenCount:responseMeta.candidatesTokenCount,thoughtsTokenCount:responseMeta.thoughtsTokenCount,totalTokenCount:responseMeta.totalTokenCount,validationOk:validationResult.ok,validationErrorClass:validationResult.ok?null:validationResult.errorClass,elapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+
       if (!validationResult.ok && validationResult.errorClass === "schema_fail") {
         const repairResult = repairEmptyAffectedQuestions(rawText, analysisInput);
         if (repairResult) {
@@ -410,6 +525,10 @@ export async function POST(req: Request) {
         : isRetryableValidationError(validationResult.errorClass) &&
           attempt < RETRY_TEMPERATURES.length - 1;
 
+      // #region agent log
+      fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H3',location:'app/api/analyze/run/route.ts:retry-decision',message:'Evaluated retry decision after attempt',data:{attempt:attempt+1,canRetry,errorClass:validationResult.ok?null:validationResult.errorClass,finishReason:responseMeta.finishReason,maxOutputTokens,nextMaxOutputTokens:!validationResult.ok&&validationResult.errorClass==='parse_fail'&&responseMeta.finishReason==='MAX_TOKENS'?Math.max(maxOutputTokens*2,8192):maxOutputTokens,elapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+
       if (!canRetry) {
         break;
       }
@@ -424,6 +543,10 @@ export async function POST(req: Request) {
     }
 
     if (!validationResult.ok) {
+      // #region agent log
+      fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H3',location:'app/api/analyze/run/route.ts:validation-failure',message:'Returning validation failure response',data:{errorClass:validationResult.errorClass,attemptCount,repairedMisconceptionCount,responseLength:rawText.length,elapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+
       const diagnostics = validationResult.diagnostics.slice(0, 10).map((diagnostic) => ({
         path: diagnostic.path,
         message: diagnostic.message,
@@ -440,7 +563,7 @@ export async function POST(req: Request) {
         at: Date.now(),
         errorClass: validationResult.errorClass,
         diagnostics,
-        modelId: ONLINE_MODEL_ID,
+        modelId: modelIdUsed,
         attemptCount,
         repairedMisconceptionCount,
         generationMeta,
@@ -448,6 +571,7 @@ export async function POST(req: Request) {
           temperature: generationTemperature,
           topP: ONLINE_GENERATION_PROFILE.topP,
           maxOutputTokens,
+          fallbackChain: ONLINE_MODEL_FALLBACK_CHAIN,
         },
         apiKeySource,
         promptLength: prompt.length,
@@ -470,7 +594,7 @@ export async function POST(req: Request) {
         docId,
         errorClass: validationResult.errorClass,
         diagnostics: diagnostics.slice(0, 3),
-        modelId: ONLINE_MODEL_ID,
+        modelId: modelIdUsed,
         attemptCount,
         repairedMisconceptionCount,
         apiKeySource,
@@ -491,6 +615,10 @@ export async function POST(req: Request) {
       responses.map((resp, idx) => [buildStudentId(idx), resp.respondentEmail]),
     );
 
+    // #region agent log
+    fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H5',location:'app/api/analyze/run/route.ts:write-start',message:'Starting analysis persistence writes',data:{attemptCount,studentsAnalyzed:validationResult.modelOutput.students.length,elapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     await adminDb.collection("analyses").doc(docId).set({
       quizId: docId,
       courseId,
@@ -500,13 +628,17 @@ export async function POST(req: Request) {
       analysisInput: JSON.parse(JSON.stringify(analysisInput)),
       emailMapping: Object.fromEntries(emailToStudentId),
       createdAt: Date.now(),
-      modelId: ONLINE_MODEL_ID,
+      modelId: modelIdUsed,
       ownerId: session.sub,
     });
 
     await adminDb.collection("quizzes").doc(docId).update({
       analysisStatus: "completed",
     });
+
+    // #region agent log
+    fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H5',location:'app/api/analyze/run/route.ts:success-return',message:'Returning successful analysis response',data:{attemptCount,repairedMisconceptionCount,totalElapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
 
     return NextResponse.json({
       success: true,
@@ -518,6 +650,11 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+
+    // #region agent log
+    fetch('http://127.0.0.1:7800/ingest/586a49ba-3067-43ef-a9d8-33c94514a13b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'15a8d0'},body:JSON.stringify({sessionId:'15a8d0',runId:debugRunId,hypothesisId:'H4',location:'app/api/analyze/run/route.ts:catch',message:'Analyze route threw error',data:{errorMessage:msg,totalElapsedMs:Date.now()-requestStartedAt},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     console.error("Analysis error:", msg);
     const status = msg === "MISSING_AUTH" || msg === "RECONNECT_REQUIRED" ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });

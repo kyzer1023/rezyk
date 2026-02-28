@@ -9,7 +9,9 @@ export const ONLINE_GENERATION_PROFILE = {
   topP: 0.9,
   maxOutputTokens: 4096,
   thinkingConfig: {
-    thinkingLevel: "minimal",
+    // Disable model thought tokens so output budget is preserved for JSON response.
+    thinkingBudget: 0,
+    includeThoughts: false,
   },
 } as const;
 
