@@ -531,11 +531,9 @@ export default function DashboardShell({
                   className="edu-btn-outline"
                   style={{ fontSize: 12, padding: "4px 10px" }}
                   onClick={() => void runBootstrap("refresh")}
-                  disabled={runningBootstrap || bootstrap.bootstrapStatus === "syncing"}
+                  disabled={runningBootstrap}
                 >
-                  {runningBootstrap || bootstrap.bootstrapStatus === "syncing"
-                    ? "Refreshing..."
-                    : "Refresh"}
+                  {runningBootstrap ? "Refreshing..." : "Refresh"}
                 </button>
               </div>
             )}
